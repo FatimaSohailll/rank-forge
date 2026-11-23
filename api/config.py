@@ -10,13 +10,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).parent / ".env",
+        # repo-root .env or api/.env; later files win, so api/.env overrides the root one
+        env_file=(Path(__file__).parent.parent / ".env", Path(__file__).parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     anthropic_api_key: str = ""
     model_id: str = "claude-haiku-5-5"
+
+    # Tavily: web search, page fetch and SERP position checks (free tier)
+    tavily_api_key: str = ""
+    tavily_max_searches_per_run: int = 8     # hard cap per /chat turn
+    tavily_daily_limit: int = 150            # in-process daily cap (free tier is ~1000/month)
+    fact_check_max_claims: int = 3           # one search per claim
 
     database_url: str = ""
 

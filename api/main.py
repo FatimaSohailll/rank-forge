@@ -1,6 +1,10 @@
 """RankForge agent API.
 
-POST /chat   {"user_id", "thread_id", "message"} -> {"reply", "tool_calls", "tokens": {"in", "out"}}
+POST /chat        {"user_id", "thread_id", "message"} -> {"reply", "tool_calls", "tokens": {"in", "out"}}
+POST /chat/stream same request, Server-Sent Events: `progress` per finished step, then `done` (same body as /chat)
+POST /resume      approve / reject / amend a pending publish request by resume_token
+GET  /approvals   pending approvals for a user
+GET  /posts/{slug}, /r/{code}, /sitemap.xml, /robots.txt   public pages and tracked affiliate redirects
 GET  /health -> ok
 """
 import json
@@ -9,14 +13,18 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
+from typing import Literal
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from config import settings
 import graph
+from stores import approvals
+from web.public import router as public_router
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger("rankforge")
@@ -115,6 +123,49 @@ def chat(req: ChatRequest) -> dict:
     return graph.run_turn(req.user_id, req.thread_id, req.message)
 
 
+@app.post("/chat/stream")
+def chat_stream(req: ChatRequest) -> StreamingResponse:
+    """Same as /chat, but streams step-by-step progress so a ~45s article does not look hung."""
+    def sse():
+        for event, data in graph.stream_turn(req.user_id, req.thread_id, req.message):
+            if event == "keepalive":
+                yield ": keepalive\n\n"
+            else:
+                yield f"event: {event}\ndata: {json.dumps(data)}\n\n"
+    return StreamingResponse(sse(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+class ResumeRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=64)
+    resume_token: str = Field(min_length=8, max_length=128)
+    decision: Literal["approve", "reject", "amend"]
+    # only used with decision="amend": change what gets published
+    title: str | None = Field(default=None, max_length=120)
+    slug: str | None = Field(default=None, max_length=80)
+    meta_description: str | None = Field(default=None, max_length=155)
+
+
+@app.post("/resume", response_model=ChatResponse)
+def resume(req: ResumeRequest) -> dict:
+    """Resolve a pending approval. Works exactly once, and only for the user it belongs to."""
+    amend = {k: v for k, v in {"title": req.title, "slug": req.slug,
+                               "meta_description": req.meta_description}.items() if v} if req.decision == "amend" else {}
+    return graph.resume_turn(req.user_id, req.resume_token, req.decision, amend)
+
+
+@app.get("/approvals")
+def pending_approvals(user_id: str) -> dict:
+    rows = approvals.list_pending(user_id[:64])
+    return {"approvals": [{"id": r["id"], "resume_token": r["resume_token"], "action": r["action"],
+                           "created_at": str(r["created_at"])} for r in rows]}
+
+
+app.include_router(public_router)
+
+
 @app.get("/")
 def root() -> dict:
-    return {"name": "RankForge Agent API", "endpoints": ["POST /chat", "GET /health"]}
+    return {"name": "RankForge Agent API",
+            "endpoints": ["POST /chat", "POST /chat/stream", "POST /resume", "GET /approvals", "GET /health",
+                          "GET /posts/{slug}", "GET /r/{code}", "GET /sitemap.xml", "GET /robots.txt"]}

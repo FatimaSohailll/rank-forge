@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ post.title }}</title>
+  {% if post.meta_description %}<meta name="description" content="{{ post.meta_description }}">{% endif %}
+  <link rel="canonical" href="{{ canonical }}">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{ post.title }}">
+  {% if post.meta_description %}<meta property="og:description" content="{{ post.meta_description }}">{% endif %}
+  <meta property="og:url" content="{{ canonical }}">
+  {% if jsonld %}<script type="application/ld+json">{{ jsonld | tojson }}</script>{% endif %}
+  <style>
+    :root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --link:#0b5fff; --rule:#e6e6e6; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#121212; --fg:#ececec; --muted:#9a9a9a; --link:#7aa7ff; --rule:#2a2a2a; } }
+    body { margin:0; background:var(--bg); color:var(--fg); font:18px/1.65 Georgia, "Times New Roman", serif; }
+    main { max-width:42rem; margin:0 auto; padding:2rem 1rem 4rem; }
+    h1 { font-size:2rem; line-height:1.2; margin:.2em 0 .4em; }
+    h2 { margin-top:2em; line-height:1.25; }
+    a { color:var(--link); }
+    .meta { color:var(--muted); font:14px/1.4 system-ui, sans-serif; margin-bottom:2rem; }
+    footer { border-top:1px solid var(--rule); margin-top:3rem; padding-top:1rem; color:var(--muted); font:14px/1.5 system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>{{ post.title }}</h1>
+      <div class="meta">Published {{ published }}</div>
+      {{ post.html | safe }}
+    </article>
+    <footer>Some links on this page are affiliate links; see the disclosure in the article.</footer>
+  </main>
+</body>
+</html>

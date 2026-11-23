@@ -26,25 +26,41 @@ class RankForgeState(TypedDict, total=False):
     pending_action: dict | None
     resume_token: str | None
     degraded: bool
+    stage: str                  # per-turn progress marker, e.g. "planned" (reset every turn)
+
+    # Memory
+    profile: dict               # long-term: saved site profile (website, niche, audience, tone, ...)
+    summary: str                # short-term: running summary of older turns
+    summarised_upto: int        # messages[:summarised_upto] are folded into `summary`
+
+    # Per-turn request details extracted by the supervisor (reset every turn)
+    topic: str                  # subject/keyword the user mentioned, "" if none
+    location: str               # country the user mentioned, "" if none
 
     # Research
     keyword: str
-    keyword_meta: dict          # volume, difficulty, cpc, affiliate_commission
+    keyword_meta: dict          # demand, intent, competition, commission, score (all estimates)
+    keyword_candidates: list[dict]   # top scored ideas from the last research run
 
     # Planning
     brief: dict                 # title, outline, angle, word_count_target, affiliate_programs
 
     # Creation
     draft: str
+    draft_id: int
 
     # QA
-    flagged_claims: list[dict]  # [{claim, verdict, source_url}]
+    flagged_claims: list[dict]  # [{claim, verdict, source_url, note}]
     linked_draft: str
+    fact_check_notes: list[str]
+    link_notes: list[str]
 
     # Edit
     final_draft: str
+    seo_report: dict            # {score, issues, passed, stats}
 
     # Publish
+    approval: dict              # human decision: {decision, draft_id, amend} (reset every turn)
     post_id: str
     post_url: str
     published_at: str
