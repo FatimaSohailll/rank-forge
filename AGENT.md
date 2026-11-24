@@ -144,7 +144,7 @@ Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publi
 | Admin dashboard (analytics, users, content) | done |
 | Benchmark (10 own + 5 attack) | cases + runner done; **live run pending (needs keys)** |
 | Dockerfile, CI, cron workflow | done; Docker build verified only in CI |
-| Tests | 210 offline passing + 15 opt-in DB integration tests skipped; desktop/mobile browser checks passed with simulated responses |
+| Tests | 219 offline passing + 15 opt-in DB integration tests skipped; desktop/mobile browser checks passed with simulated responses |
 | Deployment, demo GIF | to do |
 
 ## Last verified (2026-11-24, after pulling increments 7-11)
@@ -216,3 +216,16 @@ README); the 5 new opt-in DB tests (`RUN_DB_TESTS=1`); the cron/optimizer agains
 - Browser checks use local in-memory accounts and simulated API responses; no live model/DB spend.
 
 - Saved-draft recovery: `/app/generator` offers the latest owned final draft after refresh (excluded when starting a new topic or optimizer run). Publish review/cancel/confirm and refresh recovery were also browser-tested against the real local in-memory API.
+
+## Vercel deployment preparation
+- Root `app.py` preserves flat API imports; root runtime requirements and `.python-version` select Python 3.12.
+- `vercel.json` uses FastAPI with a 300-second duration and retains templates/static assets in the function.
+- On Vercel, startup rejects missing database/session settings, insecure cookies, and non-public HTTP URLs.
+  The public URL/origins default to `VERCEL_PROJECT_PRODUCTION_URL`; explicit settings win. Local defaults remain unchanged.
+- GitHub import uses production branch `deploy/vercel` and the shared Supabase database. No migrations or seeds.
+  Account setup, environment-variable entry, and live verification are described in `docs/VERCEL.md`.
+- Deployment is prepared, not verified live. Preserve existing admin passwords; monitoring stays disabled initially.
+
+- `vercel_build.py` bundles textstat’s NLTK cmudict data in `.nltk_data`; the root entry point stages the bundled data in a private /tmp directory and sets its lookup path, avoiding first-request downloads on Vercel’s read-only filesystem.
+
+- Deployment validation: 219 offline tests pass (15 DB tests skipped); root entry/asset checks pass; the bundled readability dictionary was exercised with runtime downloads disabled. Vercel account import and live smoke checks remain pending.

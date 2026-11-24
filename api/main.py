@@ -47,6 +47,7 @@ log = logging.getLogger("rankforge")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.validate_deployment()
     graph.init()
     auth.bootstrap_admin()
     yield

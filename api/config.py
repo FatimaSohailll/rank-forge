@@ -4,6 +4,9 @@ Secrets live only here and in the per-run context; they are never put in graph
 state or prompts.
 """
 from pathlib import Path
+from urllib.parse import urlparse
+
+from pydantic import model_validator
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +18,9 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    vercel: bool = False
+    vercel_project_production_url: str = ""
 
     anthropic_api_key: str = ""
     model_id: str = "claude-haiku-5-5"
@@ -56,6 +62,39 @@ class Settings(BaseSettings):
 
     # Conversation window sent to the model (short-term memory trimming)
     history_window: int = 12
+
+    @model_validator(mode="after")
+    def deployment_defaults(self):
+        if self.vercel:
+            if "cookie_secure" not in self.model_fields_set:
+                self.cookie_secure = True
+            domain = self.vercel_project_production_url.strip().rstrip("/")
+            if domain:
+                url = domain if domain.startswith("https://") else f"https://{domain}"
+                if "public_site_url" not in self.model_fields_set:
+                    self.public_site_url = url
+                if "allowed_origins" not in self.model_fields_set:
+                    self.allowed_origins = self.public_site_url
+        return self
+
+    def validate_deployment(self) -> None:
+        """Reject ephemeral production storage/sessions before opening the graph.
+
+        Report setting names only: validation errors must never log secret values.
+        """
+        if not self.vercel:
+            return
+        missing = [name.upper() for name in ("database_url", "session_secret") if not getattr(self, name).strip()]
+        if missing:
+            raise RuntimeError("Vercel requires: " + ", ".join(missing))
+        if not self.cookie_secure:
+            raise RuntimeError("Vercel requires COOKIE_SECURE=true")
+        for value in [self.public_site_url, *self.origins]:
+            url = urlparse(value)
+            if url.scheme != "https" or not url.hostname or url.hostname in ("localhost", "127.0.0.1", "::1"):
+                raise RuntimeError("Vercel requires public HTTPS PUBLIC_SITE_URL and ALLOWED_ORIGINS")
+        if not self.origins:
+            raise RuntimeError("Vercel requires ALLOWED_ORIGINS")
 
     @property
     def origins(self) -> list[str]:

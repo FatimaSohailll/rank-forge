@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+.pytest_cache
+**/__pycache__
+.env
+.env.*
+api/.env
+api/.env.*
+tests
+benchmark
+docs
+
+.nltk_data
