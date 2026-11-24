@@ -76,7 +76,7 @@ def fact_checker(state: RankForgeState) -> dict:
     max_claims = settings.fact_check_max_claims
 
     try:
-        out = llm.complete(extract_system(max_claims), [{"role": "user", "content": draft}], max_tokens=500,
+        out = llm.complete(extract_system(max_claims), [{"role": "user", "content": draft}], max_tokens=800,
                            schema=EXTRACT_SCHEMA)
         claims = [str(c).strip()[:250] for c in (out.get("claims") or []) if str(c).strip()][:max_claims]
     except llm.LLMRefusal:
@@ -96,7 +96,7 @@ def fact_checker(state: RankForgeState) -> dict:
         blocks.append(f"Claim {i}: {claim}\nEvidence:\n{text}")
 
     try:
-        out = llm.complete(VERIFY_SYSTEM, [{"role": "user", "content": "\n\n".join(blocks)}], max_tokens=900,
+        out = llm.complete(VERIFY_SYSTEM, [{"role": "user", "content": "\n\n".join(blocks)}], max_tokens=1500,
                            schema=VERIFY_SCHEMA)
         verdicts = {v.get("index"): v for v in (out.get("verdicts") or []) if isinstance(v, dict)}
     except llm.LLMRefusal:

@@ -32,6 +32,17 @@ class LLMRefusal(Exception):
     pass
 
 
+class LLMBadOutput(LLMRefusal):
+    """Structured output was cut off or unparseable even after one retry with a larger token cap.
+
+    Subclasses LLMRefusal so every existing `except llm.LLMRefusal` degrades gracefully instead of
+    crashing the turn; callers that want a different message can catch this first.
+    """
+
+
+MAX_RETRY_TOKENS = 4000   # ceiling for the one automatic retry of a cut-off structured response
+
+
 def _cost(tokens_in: int, tokens_out: int) -> float:
     return (tokens_in * settings.price_in_per_mtok + tokens_out * settings.price_out_per_mtok) / 1_000_000
 
@@ -47,8 +58,12 @@ def _parse_json(text: str) -> dict:
 
 
 def complete(system: str, messages: list[dict], max_tokens: int = 400,
-             schema: dict | None = None) -> str | dict:
-    """Call the model. Returns text, or a dict when `schema` (JSON Schema) is given."""
+             schema: dict | None = None, _retried: bool = False) -> str | dict:
+    """Call the model. Returns text, or a dict when `schema` (JSON Schema) is given.
+
+    Structured calls that hit max_tokens (cut-off JSON) or return unparseable JSON are retried once
+    with double the token cap; if that also fails, LLMBadOutput is raised instead of a JSON error.
+    """
     global _use_disabled_thinking, _use_structured_output
 
     output_config: dict = {"effort": "low"}
@@ -81,7 +96,7 @@ def complete(system: str, messages: list[dict], max_tokens: int = 400,
         if not retry:
             raise
         log.warning("retrying LLM call without unsupported option: %s", e)
-        return complete(system, messages, max_tokens, schema)
+        return complete(system, messages, max_tokens, schema, _retried)
 
     usage = response.usage
     cost = _cost(usage.input_tokens, usage.output_tokens)
@@ -92,6 +107,18 @@ def complete(system: str, messages: list[dict], max_tokens: int = 400,
         raise LLMRefusal("model declined the request")
 
     text = "".join(b.text for b in response.content if b.type == "text").strip()
-    if schema:
-        return _parse_json(text)
-    return text
+    if not schema:
+        return text
+
+    cut_off = response.stop_reason == "max_tokens"
+    if not cut_off:
+        try:
+            return _parse_json(text)
+        except json.JSONDecodeError:
+            pass
+    reason = "hit max_tokens" if cut_off else "returned invalid JSON"
+    if _retried:
+        raise LLMBadOutput(f"structured output {reason} twice (max_tokens={max_tokens})")
+    bigger = min(max_tokens * 2, MAX_RETRY_TOKENS)
+    log.warning("structured output %s at max_tokens=%s; retrying once with %s", reason, max_tokens, bigger)
+    return complete(system, messages, bigger, schema, _retried=True)
