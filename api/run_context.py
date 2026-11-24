@@ -15,6 +15,7 @@ class RunContext:
     tokens_in: int = 0
     tokens_out: int = 0
     cost_usd: float = 0.0
+    searches: int = 0           # Tavily credits spent this run
     tool_calls: list[dict] = field(default_factory=list)
 
     def add_usage(self, tokens_in: int, tokens_out: int, cost: float) -> None:

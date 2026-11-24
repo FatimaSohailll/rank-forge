@@ -11,16 +11,18 @@ on conflict (user_id) do nothing;
 
 -- ---------- Long-term memory for demo users ----------
 insert into user_memory (user_id, key, value) values
-  ('demo_alice', 'site_name', 'TrailReady'),
+  ('demo_alice', 'website',   'TrailReady'),
   ('demo_alice', 'niche',     'budget hiking and backpacking gear'),
   ('demo_alice', 'tone',      'friendly, practical, no hype'),
   ('demo_alice', 'audience',  'beginner hikers on a budget'),
-  ('demo_alice', 'preferred_programs', 'REI Co-op, Amazon Associates'),
-  ('demo_bob',   'site_name', 'BrewBench'),
+  ('demo_alice', 'location',  'United States'),
+  ('demo_alice', 'content_preferences', 'prefers REI Co-op and Amazon Associates links'),
+  ('demo_bob',   'website',   'BrewBench'),
   ('demo_bob',   'niche',     'home espresso and coffee gear'),
   ('demo_bob',   'tone',      'nerdy, detailed, data-driven'),
   ('demo_bob',   'audience',  'home baristas upgrading their setup'),
-  ('demo_bob',   'preferred_programs', 'Amazon Associates, Seattle Coffee Gear')
+  ('demo_bob',   'location',  'United States'),
+  ('demo_bob',   'content_preferences', 'prefers Amazon Associates and Seattle Coffee Gear links')
 on conflict (user_id, key) do nothing;
 
 -- ---------- Affiliate catalog ----------

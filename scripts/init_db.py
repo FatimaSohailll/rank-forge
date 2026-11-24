@@ -1,6 +1,6 @@
 """Apply db/schema.sql and db/seed.sql to DATABASE_URL (from api/.env), then print row counts.
 
-Usage (from the repo root):  .venv\\Scripts\\python scripts\\init_db.py
+Usage (from the repo root, with the venv active):  python scripts/init_db.py
 Safe to re-run: everything uses IF NOT EXISTS / ON CONFLICT DO NOTHING.
 """
 import sys
@@ -10,11 +10,13 @@ import psycopg
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parent.parent
-env = dotenv_values(ROOT / "api" / ".env")
+# repo-root .env or api/.env; api/.env wins (same order as api/config.py)
+env = {**dotenv_values(ROOT / ".env"), **dotenv_values(ROOT / "api" / ".env")}
 url = env.get("DATABASE_URL", "")
 
-if not url or "YOUR-DATABASE-PASSWORD" in url:
-    sys.exit("Set DATABASE_URL in api/.env first (replace YOUR-DATABASE-PASSWORD).")
+PLACEHOLDERS = ("YOUR-DATABASE-PASSWORD", "postgres.xxxx", ":password@")
+if not url or any(p in url for p in PLACEHOLDERS):
+    sys.exit("Set a real DATABASE_URL in api/.env first (copy .env.example to api/.env).")
 
 with psycopg.connect(url, autocommit=True, prepare_threshold=None, connect_timeout=15) as conn:
     for name in ("schema.sql", "seed.sql"):

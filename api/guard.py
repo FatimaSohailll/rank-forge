@@ -14,7 +14,7 @@ INJECTION_PATTERNS = [
     r"\bpretend (to be|you are|you're)\b",
     r"</?\s*(system|instructions?|admin)\s*>",
     r"\[\s*(system|admin)\s*\]",
-    r"\b(api[_ ]?key|secret key|env(ironment)? variables?|database password|connection string)\b",
+    r"\b(reveal|show|give|tell|print|share|leak|dump|what('s| is)|what are)\b.{0,30}\b(api[_ ]?keys?|secret keys?|env(ironment)? variables?|database password|connection string|credentials)\b",
     r"\b(other|another|all) users?'?s?\b.{0,30}\b(data|posts|keywords|memory|niche|articles|info)\b",
 ]
 

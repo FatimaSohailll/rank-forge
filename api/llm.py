@@ -17,7 +17,7 @@ log = logging.getLogger("rankforge.llm")
 
 client = anthropic.Anthropic(
     api_key=settings.anthropic_api_key or None,
-    timeout=30.0,
+    timeout=90.0,   # a full article is a long generation
     max_retries=2,
 )
 
