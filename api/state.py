@@ -8,7 +8,8 @@ Route = Literal[
     "keyword_research",  # -> Keyword Scout
     "write_article",     # -> Planner -> Writer -> QA -> Editor
     "publish",           # -> Publisher (always behind human approval)
-    "performance",       # -> Optimizer (reads rankings + clicks)
+    "performance",       # -> Rank Tracker || Click Tracker -> Optimizer (report only)
+    "optimize",          # -> trackers -> Optimizer, which acts: re-write (-> Planner/Writer) or re-target (-> Scout)
     "remember",          # store a user preference in long-term memory
 ]
 ROUTES: list[str] = list(Route.__args__)
@@ -36,6 +37,9 @@ class RankForgeState(TypedDict, total=False):
     # Per-turn request details extracted by the supervisor (reset every turn)
     topic: str                  # subject/keyword the user mentioned, "" if none
     location: str               # country the user mentioned, "" if none
+    forced_route: str           # set by a UI button (publish a chosen draft / optimise a chosen post): skips routing
+    publish_draft_id: int       # the draft a "Publish" button asked for (0 = newest finished draft)
+    target_post_id: int         # the post an "Optimise" button asked for (0 = Optimizer picks)
 
     # Research
     keyword: str
@@ -65,11 +69,12 @@ class RankForgeState(TypedDict, total=False):
     post_url: str
     published_at: str
 
-    # Monitor
-    rankings: list[dict]
-    clicks: list[dict]
+    # Monitor (per-post summaries written by the trackers)
+    rankings: list[dict]        # [{post_id, keyword, recent_position, prior_position, days_tracked, source}]
+    clicks: list[dict]          # [{post_id, sessions_7d, sessions_prev_7d, affiliate_clicks_7d, ctr_7d}]
 
     # Optimize
     optimizer_decision: str     # "rewrite" | "retarget" | "hold"
     optimizer_notes: str
-    loop_count: int
+    loop_count: int             # rewrites of the target post so far (+1 for this one); capped by max_loops
+    rewrite_of: int             # post id the current article will replace (re-write loop), 0 if new

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Admin · Users{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Admin</h1></div>
+{% include "admin_nav.html" %}
+<section class="card">
+  <h2>Users ({{ users | length }})</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>User</th><th>Type</th><th>Published</th><th>Drafts</th><th>Runs 30d</th><th>Spend 30d</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for u in users %}<tr>
+      <td><strong>{{ u.user_id }}</strong>{% if u.display_name %}<br><small class="muted">{{ u.display_name }}</small>{% endif %}</td>
+      <td>{{ 'admin' if u.is_admin else ('account' if u.has_login else 'API only') }}</td>
+      <td>{{ u.posts }}</td><td>{{ u.drafts }}</td><td>{{ u.runs_30d }}</td><td>${{ '%.4f' % (u.spend_30d | float) }}</td>
+      <td><span class="tag {{ 'archived' if u.disabled else 'published' }}">{{ 'disabled' if u.disabled else 'active' }}</span></td>
+      <td>{% if not u.is_admin %}<form method="post" action="/admin/users/{{ u.user_id | urlencode }}/disabled" class="inline">
+        <input type="hidden" name="disabled" value="{{ '0' if u.disabled else '1' }}">
+        <button class="btn small ghost" type="submit">{{ 'Enable' if u.disabled else 'Disable' }}</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="small muted">Disabled users can't log in or use the API. Their published pages stay up unless you unpublish them under Content.</p>
+</section>
+{% endblock %}

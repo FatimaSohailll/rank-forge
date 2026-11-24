@@ -131,4 +131,7 @@ def keyword_scout(state: RankForgeState) -> dict:
         if degraded:
             out["reply"] = ("Keyword suggestions are unavailable right now, so this is based only on "
                             "your topic.\n\n") + out["reply"]
+        if state.get("route") == "optimize" and state.get("optimizer_notes"):
+            out["reply"] = (f"Re-target: {state['optimizer_notes']}\nHere are alternative keywords to aim "
+                            "for instead:\n\n") + out["reply"]
     return out

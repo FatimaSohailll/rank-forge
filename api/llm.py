@@ -1,8 +1,9 @@
 """Single entry point for every Claude call (claude-haiku-5-5 only).
 
-Cost controls: thinking disabled, effort low, small max_tokens per call site.
-Every call records its usage on the current RunContext (feeds the /chat `tokens`
-field now, and the observability + cost-guard middleware later).
+Cost controls: thinking disabled, effort low, small max_tokens per call site, and the cost guard
+(middleware/cost_guard.py) is checked BEFORE every call. Every call records its usage on the current
+RunContext (the /chat `tokens` field, observability spans, and the daily spend).
+Retry & fallback: the SDK retries timeouts, 429 and 5xx with exponential backoff (max_retries=3).
 """
 import json
 import logging
@@ -12,13 +13,14 @@ import anthropic
 
 from config import settings
 import run_context
+from middleware import cost_guard
 
 log = logging.getLogger("rankforge.llm")
 
 client = anthropic.Anthropic(
     api_key=settings.anthropic_api_key or None,
     timeout=90.0,   # a full article is a long generation
-    max_retries=2,
+    max_retries=3,  # exponential backoff with jitter on timeouts, 429, 5xx
 )
 
 # Feature flags flipped off once if the API rejects them, so we never fail twice.
@@ -63,6 +65,8 @@ def complete(system: str, messages: list[dict], max_tokens: int = 400,
     if _use_disabled_thinking:
         params["thinking"] = {"type": "disabled"}
 
+    ctx = run_context.current()
+    cost_guard.check(ctx.cost_usd)                   # raises CostCeilingHit before any spend
     try:
         response = client.messages.create(**params)
     except anthropic.BadRequestError as e:
@@ -80,8 +84,9 @@ def complete(system: str, messages: list[dict], max_tokens: int = 400,
         return complete(system, messages, max_tokens, schema)
 
     usage = response.usage
-    ctx = run_context.current()
-    ctx.add_usage(usage.input_tokens, usage.output_tokens, _cost(usage.input_tokens, usage.output_tokens))
+    cost = _cost(usage.input_tokens, usage.output_tokens)
+    ctx.add_usage(usage.input_tokens, usage.output_tokens, cost)
+    cost_guard.record(cost)
 
     if response.stop_reason == "refusal":
         raise LLMRefusal("model declined the request")

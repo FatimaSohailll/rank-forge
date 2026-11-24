@@ -26,14 +26,17 @@ Routes:
 - write_article: the user wants a brief or a full article written or rewritten.
 - publish: the user wants their finished article published. (Deleting or editing posts that are already live
   is not supported yet: choose chat and say so.)
-- performance: the user asks how posts are ranking or converting, or what to optimise.
+- performance: the user asks how their posts are ranking, getting traffic or converting, asks to see or list
+  their published/saved articles, or asks what to optimise.
+- optimize: the user asks you to act on underperforming posts: optimise, improve, rewrite or retarget a
+  published article (put the article's subject in topic if they name one).
 - remember: the user states a lasting fact or preference about their site (website, niche, audience, tone,
   location, content preferences), OR asks what you remember about them, OR asks you to forget or change
   something you saved.
 
 Also extract (empty string if not given):
 - topic: for keyword_research and write_article, the subject or keyword the user wants (e.g. "best laptops
-  for students"). Use the user's own words; do not invent one.
+  for students"); for optimize, the article they named. Use the user's own words; do not invent one.
 - location: the country the user mentions for local search results, else "".
 For keyword_research and write_article the system does the work and writes the answer, so keep your own
 reply to one short sentence (or ask which topic they want if none was given).
@@ -83,7 +86,13 @@ def _context_block(state: RankForgeState) -> str:
     return ("\n\n" + "\n\n".join(parts)) if parts else ""
 
 
+FORCED_REPLY = {"publish": "Preparing that draft for your approval.", "optimize": "Looking at that article."}
+
+
 def supervisor(state: RankForgeState) -> dict:
+    forced = state.get("forced_route") or ""
+    if forced in FORCED_REPLY:                       # a UI button already said what to do: no model call
+        return {"route": forced, "reply": FORCED_REPLY[forced], "topic": "", "location": ""}
     unsummarised = state.get("messages", [])[state.get("summarised_upto", 0):]
     history = _window(unsummarised, settings.history_window)
     try:

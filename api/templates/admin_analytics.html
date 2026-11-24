@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Admin · Analytics{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Admin</h1>
+  <form method="get" class="inline"><label>Window
+    <select name="days" data-autosubmit>{% for d in (1, 7, 30, 90) %}<option value="{{ d }}" {% if d == days %}selected{% endif %}>{{ d }} day{{ 's' if d > 1 }}</option>{% endfor %}</select></label>
+    <noscript><button class="btn small" type="submit">Apply</button></noscript></form>
+</div>
+{% include "admin_nav.html" %}
+{% set t = summary.totals %}
+<section class="kpis">
+  <div class="kpi"><span class="label">Agent runs</span><span class="value">{{ t.runs }}</span><span class="delta">{{ t.users }} user(s)</span></div>
+  <div class="kpi"><span class="label">LLM spend</span><span class="value">${{ '%.4f' % t.cost_usd }}</span><span class="delta">{{ t.tokens_in }} in / {{ t.tokens_out }} out tokens</span></div>
+  <div class="kpi"><span class="label">Spend today</span><span class="value">${{ '%.4f' % spend_today }}</span>
+    <span class="delta {{ 'down' if spend_today >= ceiling * 0.8 else '' }}">of ${{ '%.2f' % ceiling }} daily ceiling (${{ '%.2f' % run_ceiling }}/request)</span></div>
+  <div class="kpi"><span class="label">Refused / halted / errors</span><span class="value">{{ t.refused }} / {{ t.halted }} / {{ t.errors }}</span></div>
+  <div class="kpi"><span class="label">Tavily credits today</span><span class="value">{{ tavily.used }}</span><span class="delta">of {{ tavily.limit }} (this process)</span></div>
+</section>
+
+<section class="card">
+  <h2>Per agent (last {{ days }} day{{ 's' if days > 1 }})</h2>
+  <p class="small muted">Model: {{ model }}. One span per node run, written by the observability middleware.</p>
+  {% if summary.nodes %}<div class="table-wrap"><table>
+    <thead><tr><th>Node</th><th>Runs</th><th>Avg ms</th><th>Max ms</th><th>Cost</th><th>Not OK</th></tr></thead>
+    <tbody>{% for n in summary.nodes %}<tr><td>{{ n.node }}</td><td>{{ n.runs }}</td><td>{{ n.avg_ms }}</td><td>{{ n.max_ms }}</td><td>${{ '%.4f' % n.cost_usd }}</td><td>{{ n.not_ok }}</td></tr>{% endfor %}</tbody>
+  </table></div>{% else %}<p class="empty">No agent runs yet.</p>{% endif %}
+</section>
+
+{% if summary.daily %}<section class="card">
+  <h2>Daily</h2>
+  {% set peak = (summary.daily | map(attribute='runs') | max) or 1 %}
+  <ul class="bars">{% for d in summary.daily %}<li><span class="day">{{ d.day }}</span><span class="bar" data-w="{{ (100 * d.runs / peak) | round(0) }}"></span><span>{{ d.runs }} runs · ${{ '%.4f' % d.cost_usd }}</span></li>{% endfor %}</ul>
+</section>{% endif %}
+
+<section class="card">
+  <h2>Recent spans</h2>
+  {% if recent %}<div class="table-wrap"><table>
+    <thead><tr><th>When</th><th>User</th><th>Node</th><th>Status</th><th>ms</th><th>Tokens</th><th>Tools</th></tr></thead>
+    <tbody>{% for s in recent %}<tr>
+      <td><small>{{ s.created_at.strftime('%m-%d %H:%M:%S') if s.created_at else '' }}</small></td>
+      <td>{{ s.user_id or '' }}</td><td>{{ s.node }}</td>
+      <td><span class="tag {{ s.status }}">{{ s.status }}</span>{% if s.error %}<br><small class="muted">{{ s.error[:120] }}</small>{% endif %}</td>
+      <td>{{ s.latency_ms }}</td><td>{{ s.tokens_in }}/{{ s.tokens_out }}</td>
+      <td><small>{{ s.tool_calls | map(attribute='name') | join(', ') }}</small></td></tr>{% endfor %}</tbody>
+  </table></div>{% else %}<p class="empty">Nothing yet.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page %}workspace{% endblock %}
+{% block content %}
+<p><a href="/app/articles">← My articles</a></p>
+<div class="page-head">
+  <h1>{{ title }}</h1>
+  <span class="tag {{ draft.stage }}">{{ draft.stage }}</span>
+</div>
+{% if replaces %}<p class="note">This draft is a rewrite of your live article <a href="/posts/{{ replaces.slug }}" target="_blank" rel="noopener">{{ replaces.title }}</a>. Publishing it replaces that page's content (same URL).</p>{% endif %}
+
+<div class="workspace">
+  <article class="card preview">
+    <div class="article-body">{{ preview | safe }}</div>
+  </article>
+
+  <aside class="side">
+    <section class="card" id="publish-box" data-draft="{{ draft.id }}">
+      <h2>Publish</h2>
+      {% if draft.stage == 'final' %}
+        <div class="approval" {% if pending %}data-token="{{ pending.resume_token }}"{% endif %}>
+          <p class="prompt">{% if pending %}Waiting for your approval.{% else %}Nothing is public until you approve.{% endif %}</p>
+          <div class="actions" {% if not pending %}hidden{% endif %} data-approval-actions>
+            <button class="btn small" data-resume="approve">Approve and publish</button>
+            <button class="btn small ghost" data-resume="reject">Reject</button>
+          </div>
+          {% if not pending %}<button class="btn" type="button" id="request-publish">Request publish</button>{% endif %}
+          <div class="result" aria-live="polite"></div>
+        </div>
+      {% elif draft.stage == 'published' %}
+        <p>Already published.</p>
+      {% else %}
+        <p class="muted">Only finished drafts can be published.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>SEO audit {% if report.score is defined %}<span class="score">{{ report.score }}/100</span>{% endif %}</h2>
+      {% if report.stats %}<p class="small muted">{{ report.stats.words }} words · density {{ report.stats.keyword_density_pct }}% · Flesch {{ report.stats.flesch }} · {{ report.stats.links }} links</p>{% endif %}
+      {% if report.issues %}<h3>To improve</h3><ul>{% for i in report.issues %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+      {% if report.passed %}<details><summary>Passed checks ({{ report.passed | length }})</summary><ul>{% for i in report.passed %}<li>{{ i }}</li>{% endfor %}</ul></details>{% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Fact check</h2>
+      {% if flagged %}<ul class="flags">{% for f in flagged %}<li><span class="tag">{{ f.verdict }}</span> {{ f.claim }}{% if f.note %}<br><small class="muted">{{ f.note }}</small>{% endif %}</li>{% endfor %}</ul>
+      <p class="small muted">Flagged claims were softened or removed by the Editor.</p>
+      {% else %}<p class="empty">No claims were flagged.</p>{% endif %}
+    </section>
+
+    {% if brief %}<section class="card">
+      <h2>Brief</h2>
+      <p><strong>Keyword:</strong> {{ brief.keyword }}</p>
+      {% if brief.angle %}<p><strong>Angle:</strong> {{ brief.angle }}</p>{% endif %}
+      {% if brief.affiliate_programs %}<p><strong>Programs:</strong> {{ brief.affiliate_programs | join(', ') }}</p>{% endif %}
+    </section>{% endif %}
+  </aside>
+</div>
+{% endblock %}

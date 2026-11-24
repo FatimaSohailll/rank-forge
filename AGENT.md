@@ -22,36 +22,45 @@ Must-haves: customer page + **admin dashboard** (not just a chat box); LangGraph
 ## Run it
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r api/requirements.txt
-cp .env.example api/.env          # fill ANTHROPIC_API_KEY, DATABASE_URL
-python scripts/init_db.py         # applies db/schema.sql + db/seed.sql
+pip install -r requirements-dev.txt
+cp .env.example api/.env          # fill ANTHROPIC_API_KEY, TAVILY_API_KEY, DATABASE_URL, SESSION_SECRET, ADMIN_PASSWORD
+python scripts/init_db.py         # applies db/schema.sql + db/seed.sql, sets demo/admin passwords
 cd api && uvicorn main:app --reload   # must run from api/ (flat imports)
 ```
 Tests (no network, DB or API key needed): `pip install -r requirements-dev.txt && pytest`.
 DB integration tests (opt-in, real `DATABASE_URL`, throwaway `zz_*` users, cleaned up; covers all stores incl. approvals/posts/clicks): `RUN_DB_TESTS=1 pytest tests/test_db_integration.py`.
 CLI demo (no DB needed, live progress): `python scripts/demo.py "write an article on best budget camping tents for families"` or `python scripts/demo.py` for interactive mode.
-Smoke test: `curl localhost:8000/health`; `POST /chat {"user_id":"demo_alice","thread_id":"t1","message":"hi"}`.
+Smoke test: `curl localhost:8000/health`; `POST /chat {"user_id":"some_api_user","thread_id":"t1","message":"hi"}` (login accounts like `demo_alice` need a session: use the website).
+Benchmark (live, ~$0.03): `python scripts/benchmark.py` -> `benchmark/results.md`.
 Empty `DATABASE_URL` falls back to in-memory checkpoints (state lost on restart).
 
 ## Layout
 | Path | Purpose |
 |---|---|
-| `api/main.py` | FastAPI app: `/chat`, `/chat/stream` (SSE), `/resume`, `/approvals`, `/health`, `/`; CORS; request timing |
-| `api/web/public.py`, `api/templates/` | public pages: `/posts/{slug}` (CSP, JSON-LD, canonical), `/r/{code}` (click log + 302), `/sitemap.xml`, `/robots.txt` |
-| `api/graph.py` | LangGraph build, checkpointer, `run_turn()`; thread key `user_id:thread_id` |
-| `api/state.py` | `RankForgeState` (pipeline fields declared) and `Route` literal |
+| `api/main.py` | FastAPI app: `/chat`, `/chat/stream` (SSE), `/resume`, `/approvals`, `/health`, `/api`; auth + rate limit on chat; CORS; request timing; mounts web routers and `/static` |
+| `api/web/public.py`, `api/templates/post.html` | public pages: `/posts/{slug}` (CSP, JSON-LD, canonical), `/r/{code}` (click log + 302), `/sitemap.xml`, `/robots.txt` |
+| `api/web/auth_pages.py` | `/login`, `/signup`, `/logout` (form posts, Origin check, rate-limited) |
+| `api/web/app_pages.py` | customer pages `/app` (dashboard), `/app/generator`, `/app/articles`, `/app/articles/{draft_id}` (workspace), unpublish/restore |
+| `api/web/admin.py` | `/admin` (analytics from spans), `/admin/users` (disable/enable), `/admin/content` (unpublish/restore) |
+| `api/web/cron.py` | `POST /cron/run` (X-Cron-Secret): live rank checks + Optimizer decisions for all users |
+| `api/web/common.py`, `api/templates/*.html`, `api/static/app.{js,css}` | Jinja2 pages with a strict CSP (no inline JS/CSS); vanilla JS calls the same JSON API |
+| `api/graph.py` | LangGraph build (every node wrapped by `middleware.observability.instrument`), checkpointer, `run_turn()/stream_turn()` with optional UI `action`; thread key `user_id:thread_id` |
+| `api/state.py` | `RankForgeState` and `Route` literal (`chat, refuse, keyword_research, write_article, publish, performance, optimize, remember`) |
 | `api/guard.py` | regex prefilter for injection / off-topic |
-| `api/llm.py` | **only** Anthropic call site; cost + token tracking, retries |
-| `api/config.py` | pydantic-settings; reads `api/.env` |
-| `api/run_context.py` | ContextVar per-run user, token/cost counters, tool_calls |
-| `api/agents/` | `publish.py` (`publish_gate` = LangGraph interrupt, `publisher` = safe HTML + tracked links), `memory.py` (loads profile, summarises old turns), `remember.py` (save/list/forget profile), `supervisor.py` (routes, extracts `topic`/`location`, drafts reply), `keyword_scout.py` (deterministic scoring, estimates only), `content_planner.py` (SERP + one Haiku call -> validated brief), `writer.py`, `fact_checker.py` (<=4 claims, 1 search each), `link_builder.py` (model picks anchors, code injects links + disclosure), `editor.py` (revise flagged claims, SEO audit, one improve pass), `responder.py` |
-| `api/stores/` | `db.py` (psycopg pool, `ensure_user`); `keywords.py`, `briefs.py`, `drafts.py`, `memory.py`, `approvals.py`, `posts.py`, `affiliate.py` (falls back to the rows in `db/seed.sql`) use Postgres when `DATABASE_URL` works, else an in-process dict (dev/tests only; lost on restart) |
-| `api/tools/` | `web.py` (Tavily search/fetch + `wrap_untrusted`, 1h cache, per-run cap 8 and daily cap 150 credits), `keywords.py` (Google Autocomplete, demand is an estimate), `seo_audit.py` (local score + issues); all log via `tools.log_call` |
-| `db/schema.sql`, `db/seed.sql` | 12 tables + RLS; demo users `demo_alice`, `demo_bob`, `admin` |
-| `scripts/init_db.py` | apply schema + seed |
-| `scripts/demo.py` | terminal demo of the graph with live progress (one-shot or interactive) |
+| `api/llm.py` | **only** Anthropic call site; cost guard check before each call, cost + token tracking, SDK retries |
+| `api/config.py` | pydantic-settings; reads `.env` / `api/.env` |
+| `api/run_context.py` | ContextVar per-run user, token/cost counters, tool_calls, `halted` |
+| `api/middleware/` | `observability.py` (spans), `auth.py` (sessions, PBKDF2, who the API acts as), `rate_limit.py`, `cost_guard.py`, `state_validator.py` |
+| `api/agents/` | `publish.py` (`publish_gate` interrupt; `publisher` creates or, for rewrites, replaces a post), `memory.py`, `remember.py`, `supervisor.py` (routes; UI `forced_route` skips the model), `keyword_scout.py`, `content_planner.py` (rewrite-aware), `writer.py`, `fact_checker.py`, `link_builder.py`, `editor.py`, `responder.py` (cost-halt message), `rank_tracker.py` (summaries + cron live check), `click_tracker.py`, `optimizer.py` (deterministic rewrite/retarget/hold, loop cap, action_log) |
+| `api/stores/` | `db.py`; `users.py`, `keywords.py`, `briefs.py`, `drafts.py`, `memory.py`, `approvals.py`, `posts.py`, `metrics.py` (rankings, clicks, action_log), `spans.py`, `affiliate.py`. Postgres when `DATABASE_URL` works, else in-process (dev/tests only) |
+| `api/tools/` | `web.py` (Tavily search/fetch + `wrap_untrusted`, cache, caps, one retry), `keywords.py` (Google Autocomplete), `seo_audit.py`, `serp.py` (SERP position via Tavily) |
+| `db/schema.sql`, `db/seed.sql` | 12 tables + RLS (+ `users.password_hash/disabled`); demo users, 23 affiliate programs, simulated 30-day metrics |
+| `scripts/init_db.py` | apply schema + seed, set demo/admin passwords |
+| `scripts/demo.py` | terminal demo (one-shot or interactive) |
+| `scripts/benchmark.py`, `benchmark/cases.json` | 10 own + 5 attack cases, deterministic checks, writes `benchmark/results.md` |
+| `Dockerfile`, `.github/workflows/` | container (port 7860, non-root); CI (pytest + docker build); daily cron call |
 
-## Current graph (increment 6)
+## Current graph (increment 11)
 ```
 START -> guard -(refuse)-> responder -> END
             \-(else)-> memory -> supervisor -+-(remember)-> remember -> responder
@@ -59,13 +68,30 @@ START -> guard -(refuse)-> responder -> END
                                              +-(write_article)-> keyword_scout -> content_planner -> writer
                                              +-(publish)-> publish_gate --(approved)--> publisher -> responder
                                              |                  \--(rejected / nothing to publish)--> responder
-                                             +-(chat | performance)-> responder
+                                             +-(performance | optimize)-> rank_tracker  -+-> optimizer
+                                             |                            click_tracker -+
+                                             +-(chat)-> responder
 writer -+-> fact_checker -+-> editor -> responder      (QA runs in parallel; editor joins both)
         +-> link_builder -+
+optimizer -(optimize, rewrite)--> content_planner -> writer -> ... -> editor   (re-write loop)
+          -(optimize, retarget)-> keyword_scout -> responder                    (re-target loop)
+          -(performance / hold)-> responder                                     (report)
 ```
-`performance` still falls through to the supervisor's free-text reply (not built).
-Nodes write the user-facing `reply` themselves; the responder just passes it through (and keeps only the
-article *summary* in chat history). Per-turn fields (`stage`, `topic`, `approval`, QA notes) are reset in `graph._turn_input`.
+Nodes write the user-facing `reply` themselves; the responder passes it through (keeps only the article *summary*
+in history, and replaces the reply if the cost guard halted the run). Per-turn fields (`stage`, `topic`, `approval`,
+QA notes, `forced_route`, `publish_draft_id`, `target_post_id`, `rewrite_of`, optimizer fields) are reset in
+`graph._turn_input`. UI buttons pass `action={"type": "publish"|"optimize", ...}`; the supervisor then skips its
+model call.
+
+## Optimizer (monitor lane)
+- Trackers only read time series in chat (no credits). `POST /cron/run` does live SERP checks for
+  `RANK_CHECKS_PER_CRON` posts (oldest first; skipped while `PUBLIC_SITE_URL` is localhost) and logs a decision
+  per post. The cron never rewrites anything.
+- `optimizer.decide()`: <7 days of data -> hold; worse than #40 with <50 visits/day and not climbing -> retarget;
+  slipped >=5 positions or lost >=25% visits -> rewrite; stuck at #11-30 -> rewrite; improving or top 10 -> hold.
+  A post rewritten `MAX_LOOPS` times escalates to a human instead (loop overflow).
+- A rewrite brief carries `rewrite_of`; the approval prompt says it replaces the live post; `publisher` updates
+  that post in place (same slug, `rewrite_count + 1`).
 
 ## Human approval (publish)
 `publish_gate` calls LangGraph `interrupt()` with the exact draft (title, words, SEO score, link count). The
@@ -91,24 +117,22 @@ Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publi
 ## Status
 | Area | State |
 |---|---|
-| Schema, seed, init script | done |
-| `/chat`, `/health`, guard, supervisor, responder, Postgres checkpointer | done |
-| Keyword Scout, Content Planner, Writer, Fact Checker, Link Builder, Editor | done; live run: 1,308-word article, SEO 95/100, ~54s, ~$0.005, 5 Tavily searches, no DB |
-| Long-term memory (profile) + summarising short-term trim | done; live-tested: saved, recalled in a new thread, secrets refused, other user isolated (no DB) |
-| Publish with human approval, public article pages, `/r/{code}` click logging, sitemap/robots | done; live-tested on Postgres: pause, reminder, approve, single-use token, public page, tracked redirect + counters |
-| Rank/Click Tracker, Optimizer | not started |
-| Tools: web search/fetch, keyword search, SEO audit | done (Tavily calls unit-tested with mocked HTTP, not yet run live; autocomplete verified live) |
-| Tools: affiliate lookup, SERP position, analytics | not started |
-| Middleware (observability, auth, rate limit, cost guard, retry, state validator, HITL) | not started; only cost counting + SDK retry exist |
-| Customer pages (dashboard, generator, my articles, workspace) | not started |
-| Admin dashboard (users, content, analytics) | not started |
-| Benchmark (10 own + 5 attack tests) and README (GIF, diagram, table) | not started |
-| Cron endpoints (`CRON_SECRET`) | not started |
-| Tests | 141 passing + 10 opt-in DB integration tests (guard, web budget, streaming, memory, tools, scout/planner, pipeline, graph smoke, user isolation, `/chat` shape) with a fake LLM; no benchmark yet |
-| CI, Dockerfile, README | none |
+| Schema, seed, init script | done (re-run `init_db.py` to add increment-9 columns) |
+| `/chat`, guard, supervisor, responder, Postgres checkpointer | done |
+| Keyword Scout, Content Planner, Writer, Fact Checker, Link Builder, Editor | done; live run: 1,308-word article, SEO 95/100, ~54s, ~$0.005 |
+| Long-term memory (profile) + summarising short-term trim | done; live-tested |
+| Publish with human approval, public pages, `/r/{code}` click logging | done; live-tested on Postgres |
+| Rank Tracker, Click Tracker, Optimizer (both loops, loop cap, action_log), cron endpoint | done; offline-tested; **not yet run live** |
+| Middleware: observability, auth, rate limit, cost guard, retry, state validator, HITL | done; offline-tested |
+| Customer pages (dashboard, generator, my articles, workspace) | done; tested with TestClient and an HTTP smoke run |
+| Admin dashboard (analytics, users, content) | done |
+| Benchmark (10 own + 5 attack) | cases + runner done; **live run pending (needs keys)** |
+| Dockerfile, CI, cron workflow | done; Docker build verified only in CI |
+| Tests | 198 offline + 15 opt-in DB integration tests (new DB tests not yet run against Supabase) |
+| Deployment, demo GIF | to do |
 
 ## Decisions
-- Real integrations only: Tavily (search/fetch/fact-check), Google Autocomplete + Trends (keywords), own `/go/{slug}` redirect (clicks), own site pages (publish). Rank tracking: SERP position check; Search Console optional later.
+- Real integrations only: Tavily (search/fetch/fact-check), Google Autocomplete + Trends (keywords), own `/r/{code}` redirect (clicks), own site pages (publish). Rank tracking: SERP position check; Search Console optional later.
 - Keyword demand is an **estimate**, labelled as such; no fabricated volume numbers.
 - Single model: `claude-haiku-5-5` everywhere (hackathon rule + spend limit); the cost guard is therefore mandatory, not optional.
 - Short-term memory trims by summarising older turns (canvas), replacing the current plain 12-message window.
@@ -133,21 +157,19 @@ Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publi
 - Nodes return partial state; `messages` uses the `operator.add` reducer.
 
 ## Known gaps / risks
-- `/chat` trusts client-supplied `user_id` (no auth).
-- `max_spend_per_run_usd` / `daily_spend_ceiling_usd` defined but unenforced; `CRON_SECRET` defaults to `change-me`.
-- `guard.py` blocks "api key" / "environment variable" mentions (false positives on SEO questions).
+- Accounts with a password (and admins) can only be acted for with a session; API-only users (no password) still
+  trust the body `user_id`. That is intended for scripts/benchmark: their data is isolated by id, but anyone who
+  knows an API-only id can use it. Set `DEMO_PASSWORD`/`ADMIN_PASSWORD` and run `init_db.py` before going public.
+- `SESSION_SECRET` must be set in production (otherwise sessions end on every restart). `COOKIE_SECURE=true` behind HTTPS.
+- Rate limits and the Tavily daily cap are per process; the LLM daily ceiling is reloaded from `spans`.
+- Rankings are Tavily-index positions (`source='tavily'`), an approximation of Google; seeded history is simulated.
+- Clicks are first-party (views incl. bots, `/r/{code}` redirects); no GA4 / network conversion data.
+- `guard.py` blocks "api key" / "environment variable" questions (false positives on SEO questions).
 - `llm.py` feature-flag fallbacks are process-global.
-- Dependencies install cleanly (anthropic 2.12, langgraph 1.2.24), but a live `claude-haiku-5-5` call is not verified yet (needs a key in `api/.env`).
-- Verified against the real Supabase Postgres (pooler, port 6543): keywords/briefs/drafts/user_memory/affiliate stores and the Postgres checkpointer pass the integration tests; a live `--db` article run wrote keywords, briefs, drafts and checkpoints for `demo_alice`. The app connects as a superuser (bypasses RLS); filter-by-`user_id` is the only isolation, so use a non-superuser role for the deploy.
-- Tavily credits: ~4-5 per article, 3 per keyword-research turn. The daily cap is in-process only (resets on restart); persist it with the cost guard in the middleware increment.
-- `/chat`, `/resume` and `/approvals` all trust the client-supplied `user_id`, so anyone who knows a user id can see and resolve that user's approvals. Real auth is in the middleware increment; until then do not expose this publicly.
-- The newest unpublished `final` draft is what "publish it" offers; older finals from earlier runs stay as `final` (a live run offered an old 0-link draft after publishing a newer one). The approval prompt shows the title, so a human catches it. The "my articles" page should list drafts and let the user choose, and a new final should supersede older ones for the same keyword.
-- Deleting or editing already-published posts is not supported yet (the supervisor says so). `amend` only changes title/slug/meta before publishing.
-- `PUBLIC_SITE_URL` must be set to the deployed URL, or post URLs and the sitemap say `http://localhost:8000`.
-- The tracked-link path is `/r/{code}` (as in `db/schema.sql`), not `/go/{slug}`.
-- Re-seeding adds the canvas-key memory rows but leaves old ones (`site_name`, `preferred_programs`); the code ignores them.
-- No onboarding prompt yet (the assistant does not ask for niche/tone when the profile is empty); users set it by telling it.
-- A full article still takes ~50s end to end; `/chat/stream` and `scripts/demo.py` show progress while it runs (first update within ~2s).
-- Bug fixed: the Link Builder used to drop every link when the model echoed a program as `REI Co-op (AvantLink, 5.0% commission)`. `program` is now an enum in the schema and `resolve_program` tolerates labelled forms.
-- Headings are linted for unsupportable claims ("Tested", prices, percentages, "#1") with no LLM or search cost, and the Editor swaps in a clean H1 if the model's fix is rejected. Body claims are still only spot-checked (3 per article).
+- The app connects as a superuser (bypasses RLS); filter-by-`user_id` is the isolation. Use a non-superuser role in production.
+- `PUBLIC_SITE_URL` must be the deployed URL, or post links, the sitemap and rank checks are wrong.
+- Older `final` drafts are not superseded automatically; the workspace lets the user pick which draft to publish.
+- A full article takes ~50s; `/chat/stream`, the generator page and `scripts/demo.py` show progress.
 - Keyword competition is only checked for the top 3 ideas, so others show `n/a`.
+- Fixed in increment 7-11: the publisher used the current thread's brief (wrong keyword/meta when publishing an
+  older draft); it now uses the draft's own brief. Concurrent publishes with the same title no longer crash on the slug.

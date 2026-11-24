@@ -153,6 +153,10 @@ create table if not exists spans (
     created_at timestamptz not null default now()
 );
 
+-- Increment 9+: login accounts and account disabling (safe to re-run)
+alter table users add column if not exists password_hash text;      -- null = API-only user (no login)
+alter table users add column if not exists disabled boolean not null default false;
+
 create index if not exists idx_keywords_user   on keywords(user_id);
 create index if not exists idx_posts_user      on posts(user_id);
 create index if not exists idx_rankings_post   on rankings(post_id, date);
@@ -160,6 +164,8 @@ create index if not exists idx_clicks_post     on clicks(post_id, date);
 create index if not exists idx_spans_created   on spans(created_at);
 create index if not exists idx_spans_user      on spans(user_id);
 create index if not exists idx_approvals_user  on approvals(user_id, status);
+create index if not exists idx_action_log_user on action_log(user_id, created_at);
+create index if not exists idx_drafts_user     on drafts(user_id, stage);
 
 -- Row-Level Security: deny-by-default for Supabase anon/authenticated roles.
 -- The API connects as the postgres role (bypasses RLS) and filters by user_id itself.

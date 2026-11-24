@@ -299,3 +299,15 @@ def test_sitemap_and_robots(client, published):
     assert sm.status_code == 200 and "/posts/best-budget-hiking-daypacks" in sm.text
     robots = client.get("/robots.txt").text
     assert "Disallow: /r/" in robots and "Sitemap:" in robots
+
+
+def test_published_post_uses_the_drafts_own_brief_not_the_threads(client):
+    """Regression: the post used to take keyword/meta from whatever brief the current thread last saw."""
+    from stores import briefs
+    bid = briefs.save_brief("alice", "budget daypacks", {"keyword": "budget daypacks", "title": "T",
+                                                          "meta_description": "Daypacks for less."})
+    drafts.save_draft("alice", bid, "final", ARTICLE, seo_report={"score": 90, "stats": {"words": 1200}})
+    chat(client, "alice", "publish it", thread="another-thread")
+    chat(client, "alice", "approve", thread="another-thread")
+    post = posts.get_published("best-budget-hiking-daypacks")
+    assert post["keyword"] == "budget daypacks" and post["meta_description"] == "Daypacks for less."

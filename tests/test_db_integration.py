@@ -27,6 +27,7 @@ def real_database_url() -> str:
 def cleanup(conn) -> None:
     for u in (USER, OTHER):
         conn.execute("delete from users where user_id=%s", (u,))          # cascades to the user's rows
+        conn.execute("delete from spans where user_id=%s", (u,))          # spans have no FK
         for table in ("checkpoint_writes", "checkpoint_blobs", "checkpoints"):
             conn.execute(f"delete from {table} where thread_id like %s", (f"{u}:%",))
 
@@ -178,3 +179,80 @@ def test_drafts_stage_change_is_scoped_to_the_owner(pg):
 def test_affiliate_programs_have_ids_in_the_database(pg):
     from stores import affiliate
     assert all(isinstance(p["id"], int) for p in affiliate.list_programs())
+
+
+# ---------- increments 8-10: accounts, monitor time series, optimizer log, spans ----------
+
+@pytest.fixture
+def pg9(pg):
+    with pg.pool.connection() as conn:
+        has = conn.execute("select 1 from information_schema.columns where table_name='users'"
+                           " and column_name='password_hash'").fetchone()
+    if not has:
+        pytest.skip("schema is older than increment 9: re-run python scripts/init_db.py")
+    return pg
+
+
+def test_accounts_passwords_and_disable(pg9):
+    from middleware import auth
+    from stores import users
+    assert users.get(USER)["password_hash"] is None                     # API-only user
+    users.set_password(USER, auth.hash_password("longenough"))
+    assert auth.login(USER, "longenough")["user_id"] == USER
+    users.set_disabled(USER, True)
+    assert auth.login(USER, "longenough") is None
+    assert not users.create_account(USER, "x")                          # taken
+    rows = {u["user_id"]: u for u in users.list_with_stats()}
+    assert rows[USER]["has_login"] and rows[USER]["disabled"]
+
+
+def test_rankings_clicks_actions_and_isolation(pg9):
+    from datetime import date, timedelta
+    from stores import metrics, posts
+    post = posts.create_post(USER, "zz-test-post-metrics", "T", "kw", "", "<p>x</p>", {})
+    for d in range(10):
+        day = date.today() - timedelta(days=d)
+        metrics.add_ranking(USER, post["id"], "kw", 10 + d, "simulated", day)
+        metrics.add_clicks(USER, post["id"], day, 100, 8)
+    metrics.add_ranking(USER, post["id"], "kw", 3, "tavily")             # upsert today's row
+    ranks = metrics.rankings_for_user(USER)
+    assert len(ranks) == 10 and ranks[-1]["position"] == 3 and ranks[-1]["source"] == "tavily"
+    assert metrics.rankings_for_user(OTHER) == [] and metrics.clicks_for_user(OTHER) == []
+    assert sum(r["sessions"] for r in metrics.clicks_for_user(USER)) == 1000
+    assert metrics.last_checked([post["id"]])[post["id"]] == date.today()
+    metrics.log_action(USER, post["id"], "rewrite", "stuck", 1)
+    assert metrics.actions_for_user(USER)[0]["title"] == "T" and metrics.actions_for_user(OTHER) == []
+
+
+def test_post_rewrite_status_and_owner_scoping(pg9):
+    from stores import posts
+    post = posts.create_post(USER, "zz-test-post-rewrite", "Old", "kw", "", "<p>x</p>", {})
+    with pytest.raises(posts.SlugTaken):
+        posts.create_post(USER, "zz-test-post-rewrite", "Dup", "kw", "", "<p>x</p>", {})
+    assert posts.update_post(OTHER, post["id"], "Hijack", "", "<p>x</p>", {}) is None
+    assert posts.update_post(USER, post["id"], "New", "m", "<p>y</p>", {})["rewrite_count"] == 1
+    assert posts.get_for_user(OTHER, post["id"]) is None
+    assert not posts.set_status(post["id"], "archived", user_id=OTHER)
+    assert posts.set_status(post["id"], "archived", user_id=USER)
+    assert posts.get_published("zz-test-post-rewrite") is None
+    assert [p["title"] for p in posts.list_for_user(USER)] == ["New"]
+
+
+def test_spans_summary_and_spend_today(pg9):
+    from stores import spans
+    before = spans.spend_today()
+    spans.record({"run_id": "zz-run", "user_id": USER, "node": "writer", "tokens_in": 10, "tokens_out": 20,
+                  "cost_usd": 0.001, "latency_ms": 5, "tool_calls": [{"name": "web_search", "args": {}}]})
+    assert abs(spans.spend_today() - before - 0.001) < 1e-6
+    assert any(n["node"] == "writer" for n in spans.summary(1)["nodes"])
+    assert spans.recent(5)[0]["run_id"] == "zz-run"
+
+
+def test_drafts_listing_joins_the_brief(pg9):
+    from stores import briefs, drafts
+    bid = briefs.save_brief(USER, "kw", {"keyword": "kw", "title": "Listed", "rewrite_of": 7})
+    drafts.save_draft(USER, bid, "final", "# Listed body")
+    row = drafts.list_drafts(USER, "final")[0]
+    assert row["title"] == "Listed" and row["keyword"] == "kw" and row["rewrite_of"] == "7"
+    assert drafts.list_drafts(OTHER) == []
+    assert briefs.get_brief(OTHER, bid) is None and briefs.get_brief(USER, bid)["brief"]["title"] == "Listed"

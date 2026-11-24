@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}SEO + affiliate content engine{% endblock %}
+{% block main_class %}landing{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">For affiliate marketers and niche bloggers</p>
+  <h1>From keyword to a ranking, earning article, with a human in charge.</h1>
+  <p class="lede">RankForge is a team of AI agents. It finds keywords worth targeting, writes and fact-checks the article,
+    adds tracked affiliate links and publishes it only when you approve. Then it watches rankings and clicks and
+    tells you what to rewrite or retarget.</p>
+  <div class="cta">
+    {% if me %}<a class="btn" href="/app/generator">Open the generator</a>
+    {% else %}<a class="btn" href="/signup">Create a free account</a> <a class="btn ghost" href="/login">Log in</a>{% endif %}
+  </div>
+</section>
+
+<section class="pipeline" aria-label="How it works">
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li><strong>Keyword Scout</strong><span>Scores ideas by demand, buyer intent, competition and commission.</span></li>
+    <li><strong>Content Planner</strong><span>Reads the live top results and writes a brief with a better angle.</span></li>
+    <li><strong>Writer</strong><span>Drafts the full article in your saved tone and niche.</span></li>
+    <li><strong>Fact Checker ‖ Link Builder</strong><span>Run in parallel: claims are checked on the web, affiliate links placed by code.</span></li>
+    <li><strong>Editor</strong><span>Fixes flagged claims, audits SEO and improves the score.</span></li>
+    <li><strong>You approve</strong><span>Nothing goes live until you say so. Approval can't be faked by the model.</span></li>
+    <li><strong>Rank + Click Trackers → Optimizer</strong><span>Watches positions and affiliate clicks, then recommends a rewrite or a new target.</span></li>
+  </ol>
+</section>
+
+<section class="features">
+  <div class="card"><h3>Safe by design</h3><p>Prompt-injection and off-topic filters, web pages fenced as untrusted data, a per-request and daily spending cap, and per-user data isolation.</p></div>
+  <div class="card"><h3>Honest numbers</h3><p>Keyword scores are labelled estimates. Every claim the fact checker can't support is softened or removed before you see it.</p></div>
+  <div class="card"><h3>Remembers you</h3><p>Tell it your niche, audience and tone once. It never stores passwords, keys or contact details.</p></div>
+</section>
+
+<section class="pricing" aria-label="Pricing">
+  <h2>Pricing</h2>
+  <div class="plans">
+    <div class="card plan"><h3>Starter</h3><p class="price">Free</p><ul><li>3 articles / month</li><li>Keyword research</li><li>Tracked links on your RankForge blog</li></ul></div>
+    <div class="card plan featured"><h3>Pro</h3><p class="price">$29<span>/month</span></p><ul><li>40 articles / month</li><li>Optimizer rewrites and retargets</li><li>Rank + click tracking</li></ul></div>
+    <div class="card plan"><h3>Agency</h3><p class="price">$99<span>/month</span></p><ul><li>200 articles / month</li><li>Multiple sites</li><li>Priority support</li></ul></div>
+  </div>
+  <p class="muted small">Plus our revenue share on affiliate programs we bring you. Illustrative pricing for the hackathon pitch.</p>
+</section>
+{% endblock %}

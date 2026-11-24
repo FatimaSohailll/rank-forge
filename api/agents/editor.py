@@ -57,9 +57,12 @@ def _safe_h1(body: str, keyword: str, brief_title: str) -> str:
     return body[:m.start(1)] + clean + body[m.end(1):]
 
 
-def _format_reply(body: str, report: dict, flagged: list[dict], notes: list[str]) -> str:
+def _format_reply(body: str, report: dict, flagged: list[dict], notes: list[str], rewrite: bool = False) -> str:
     stats = report["stats"]
     lines = [f"Article ready: {stats['words']} words, SEO score **{report['score']}/100**."]
+    if rewrite:
+        lines.append("This is a rewrite of one of your live articles. Say **publish it** to replace the live "
+                     "version (you'll be asked to approve first).")
     if report["issues"]:
         lines.append("Remaining SEO notes: " + "; ".join(report["issues"][:3]))
     if flagged:
@@ -95,4 +98,4 @@ def editor(state: RankForgeState) -> dict:
     draft_id = drafts.save_draft(state["user_id"], (state.get("brief") or {}).get("id"), "final", body,
                                  flagged_claims=flagged, seo_report=report)
     return {"final_draft": body, "seo_report": report, "draft_id": draft_id, "stage": "edited",
-            "reply": _format_reply(body, report, flagged, notes)}
+            "reply": _format_reply(body, report, flagged, notes, bool((state.get("brief") or {}).get("rewrite_of")))}

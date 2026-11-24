@@ -1,16 +1,21 @@
 """LangGraph definition and the per-turn runner used by POST /chat.
 
-Current graph:
+Graph:
     START -> guard -(refuse)-> responder -> END
                    +-(else)-> memory -> supervisor -+-(remember)-> remember -> responder
                                           +-(keyword_research)-> keyword_scout -+-> responder -> END
                                           +-(write_article)---> keyword_scout -> content_planner -> writer
                                           +-(publish)---------> publish_gate -(approved)-> publisher -> responder
+                                          +-(performance | optimize)-> rank_tracker -+-> optimizer
+                                          |                            click_tracker -+
                                           +-(other)-----------> responder
     writer -+-> fact_checker -+-> editor -> responder   (QA runs in parallel, editor joins)
             +-> link_builder -+
+    optimizer -(optimize + rewrite)--> content_planner -> writer -> ...   (re-write loop; publish replaces the post)
+              -(optimize + retarget)-> keyword_scout -> responder          (re-target loop)
+              -(report / hold)-------> responder
 publish_gate pauses the graph (LangGraph interrupt) until a human approves or rejects; see "approvals" below.
-Later increments add trackers and optimizer.
+Every node is wrapped by middleware/observability.instrument (spans, cost-guard halt, state validation).
 """
 import logging
 import queue
@@ -24,19 +29,23 @@ from langgraph.types import Command
 
 import guard as guard_rules
 import run_context
+from agents.click_tracker import click_tracker
 from agents.content_planner import content_planner
 from agents.editor import editor
 from agents.fact_checker import fact_checker
 from agents.keyword_scout import keyword_scout
 from agents.link_builder import link_builder
 from agents.memory import memory_node
+from agents.optimizer import after_optimizer, optimizer
 from agents.publish import after_gate, publish_gate, publisher
+from agents.rank_tracker import rank_tracker
 from agents.remember import remember
 from agents.responder import responder
 from agents.supervisor import supervisor
 from agents.writer import writer
+from middleware.observability import instrument
 from state import RankForgeState
-from stores import approvals, db
+from stores import approvals, db, users
 
 log = logging.getLogger("rankforge.graph")
 
@@ -59,8 +68,10 @@ def after_guard(state: RankForgeState) -> str:
     return "responder" if state.get("route") == "refuse" else "memory"
 
 
-def after_supervisor(state: RankForgeState) -> str:
+def after_supervisor(state: RankForgeState) -> str | list[str]:
     route = state.get("route")
+    if route in ("performance", "optimize"):
+        return ["rank_tracker", "click_tracker"]       # Monitor lane runs in parallel; optimizer joins
     if route == "remember":
         return "remember"
     if route == "publish":
@@ -89,29 +100,31 @@ def after_writer(state: RankForgeState) -> list[str]:
 
 # ---------- build ----------
 
+NODES = {
+    "guard": guard, "memory": memory_node, "supervisor": supervisor, "remember": remember,
+    "keyword_scout": keyword_scout, "content_planner": content_planner, "writer": writer,
+    "fact_checker": fact_checker, "link_builder": link_builder, "editor": editor,
+    "publish_gate": publish_gate, "publisher": publisher,
+    "rank_tracker": rank_tracker, "click_tracker": click_tracker, "optimizer": optimizer,
+    "responder": responder,
+}
+
+
 def build(checkpointer):
     g = StateGraph(RankForgeState)
-    g.add_node("guard", guard)
-    g.add_node("memory", memory_node)
-    g.add_node("supervisor", supervisor)
-    g.add_node("remember", remember)
-    g.add_node("keyword_scout", keyword_scout)
-    g.add_node("content_planner", content_planner)
-    g.add_node("writer", writer)
-    g.add_node("fact_checker", fact_checker)
-    g.add_node("link_builder", link_builder)
-    g.add_node("editor", editor)
-    g.add_node("publish_gate", publish_gate)
-    g.add_node("publisher", publisher)
-    g.add_node("responder", responder)
+    for name, fn in NODES.items():
+        g.add_node(name, instrument(name, fn))           # observability + cost guard + state validator
 
     g.add_edge(START, "guard")
     g.add_conditional_edges("guard", after_guard, {"responder": "responder", "memory": "memory"})
     g.add_edge("memory", "supervisor")
     g.add_edge("remember", "responder")
-    g.add_conditional_edges("supervisor", after_supervisor, {
-        "remember": "remember", "publish_gate": "publish_gate", "keyword_scout": "keyword_scout",
-        "content_planner": "content_planner", "responder": "responder"})
+    g.add_conditional_edges("supervisor", after_supervisor, [
+        "remember", "publish_gate", "keyword_scout", "content_planner", "rank_tracker", "click_tracker",
+        "responder"])
+    g.add_edge(["rank_tracker", "click_tracker"], "optimizer")   # join: optimizer waits for both
+    g.add_conditional_edges("optimizer", after_optimizer, {
+        "content_planner": "content_planner", "keyword_scout": "keyword_scout", "responder": "responder"})
     g.add_conditional_edges("publish_gate", after_gate, {"publisher": "publisher", "responder": "responder"})
     g.add_edge("publisher", "responder")
     g.add_conditional_edges("keyword_scout", after_scout, {
@@ -151,7 +164,8 @@ def thread_key(user_id: str, thread_id: str) -> str:
     return f"{user_id}:{thread_id}"
 
 
-def _turn_input(user_id: str, thread_id: str, message: str) -> dict:
+def _turn_input(user_id: str, thread_id: str, message: str, action: dict | None = None) -> dict:
+    action = action or {}
     return {
         "user_id": user_id,
         "thread_id": thread_id,
@@ -168,6 +182,12 @@ def _turn_input(user_id: str, thread_id: str, message: str) -> dict:
         "fact_check_notes": [],
         "link_notes": [],
         "degraded": False,
+        "forced_route": action.get("type", ""),
+        "publish_draft_id": int(action.get("draft_id") or 0),
+        "target_post_id": int(action.get("post_id") or 0),
+        "rewrite_of": 0,
+        "optimizer_decision": "",
+        "optimizer_notes": "",
     }
 
 
@@ -193,6 +213,9 @@ NODE_LABELS = {
     "editor": "Edited and scored the article",
     "publish_gate": "Got your approval",
     "publisher": "Published the article",
+    "rank_tracker": "Read your ranking history",
+    "click_tracker": "Read your traffic and clicks",
+    "optimizer": "Decided what to optimise",
 }
 KEEPALIVE_S = 10.0
 
@@ -225,6 +248,12 @@ def _approval_prompt(payload: dict) -> str:
     if payload.get("seo_score") is not None:
         bits.append(f"SEO {payload['seo_score']}/100")
     bits.append(f"{payload.get('affiliate_links', 0)} tracked affiliate link(s)")
+    if payload.get("flagged_claims"):
+        bits.append(f"{payload['flagged_claims']} claim(s) were flagged by the fact check and softened")
+    if payload.get("replaces_post_id"):
+        return (f"I'm ready to replace your live article **{payload.get('replaces_title')}** with the rewrite "
+                f"**{payload.get('title', 'your article')}** ({', '.join(bits)}). The live version is unchanged "
+                "until you decide. Reply **approve** to replace it or **reject** to cancel.")
     return (f"I'm ready to publish **{payload.get('title', 'your article')}** ({', '.join(bits)}). "
             "Nothing is public yet. Reply **approve** to publish it or **reject** to cancel.")
 
@@ -265,8 +294,11 @@ def _resume(user_id: str, token: str, decision: str, amend: dict | None, on_prog
     return _execute(user_id, resolved["thread_key"], Command(resume=payload), on_progress)
 
 
-def _handle(user_id: str, thread_id: str, message: str, on_progress=None) -> str:
-    db.ensure_user(user_id)
+ACTIONS = {"publish", "optimize"}
+
+
+def _handle(user_id: str, thread_id: str, message: str, on_progress=None, action: dict | None = None) -> str:
+    users.ensure(user_id)
     key = thread_key(user_id, thread_id)
     pending = approvals.pending_for_thread(user_id, key)
     if pending:
@@ -276,16 +308,19 @@ def _handle(user_id: str, thread_id: str, message: str, on_progress=None) -> str
         return _resume(user_id, pending["resume_token"], decision, None, on_progress)
     if DECISION_WORD.match(message):
         return NOTHING_PENDING
-    return _execute(user_id, key, _turn_input(user_id, thread_id, message), on_progress)
+    if action and action.get("type") not in ACTIONS:
+        action = None
+    return _execute(user_id, key, _turn_input(user_id, thread_id, message, action), on_progress)
 
 
 # ---------- entry points ----------
 
-def run_turn(user_id: str, thread_id: str, message: str) -> dict:
+def run_turn(user_id: str, thread_id: str, message: str, action: dict | None = None) -> dict:
+    """One chat turn. `action` comes from a UI button: {"type": "publish", "draft_id"} or {"type": "optimize", "post_id"}."""
     ctx = run_context.RunContext(run_id=uuid.uuid4().hex, user_id=user_id, thread_id=thread_id)
     token = run_context.set_run(ctx)
     try:
-        reply = _handle(user_id, thread_id, message)
+        reply = _handle(user_id, thread_id, message, action=action)
     except Exception:
         log.exception("turn failed")
         reply = "Sorry, something went wrong while handling that. Please try again."
@@ -299,7 +334,7 @@ def resume_turn(user_id: str, resume_token: str, decision: str, amend: dict | No
     ctx = run_context.RunContext(run_id=uuid.uuid4().hex, user_id=user_id, thread_id="resume")
     token = run_context.set_run(ctx)
     try:
-        db.ensure_user(user_id)
+        users.ensure(user_id)
         reply = _resume(user_id, resume_token, decision, amend)
     except Exception:
         log.exception("resume failed")
@@ -309,7 +344,7 @@ def resume_turn(user_id: str, resume_token: str, decision: str, amend: dict | No
     return _result(reply, ctx)
 
 
-def stream_turn(user_id: str, thread_id: str, message: str):
+def stream_turn(user_id: str, thread_id: str, message: str, action: dict | None = None):
     """Run a turn in a worker thread and yield (event, data): progress..., then done.
 
     The worker owns the RunContext (a ContextVar set inside a generator would be lost between
@@ -326,7 +361,7 @@ def stream_turn(user_id: str, thread_id: str, message: str):
     def worker() -> None:
         token = run_context.set_run(ctx)
         try:
-            reply = _handle(user_id, thread_id, message, progress)
+            reply = _handle(user_id, thread_id, message, progress, action)
         except Exception:
             log.exception("streamed turn failed")
             reply = "Sorry, something went wrong while handling that. Please try again."

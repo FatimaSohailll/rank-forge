@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}My articles{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>My articles</h1>
+  <a class="btn" href="/app/generator">New article</a>
+</div>
+
+<section class="card">
+  <h2>Ready to publish</h2>
+  {% if finals %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Draft</th><th>Keyword</th><th>SEO</th><th>Created</th><th></th></tr></thead>
+    <tbody>
+    {% for d in finals %}
+      <tr>
+        <td><a href="/app/articles/{{ d.id }}">{{ d.title or ('Draft #' ~ d.id) }}</a>{% if d.rewrite_of %} <span class="tag">rewrite</span>{% endif %}</td>
+        <td>{{ d.keyword or '' }}</td>
+        <td>{% if d.seo_report %}{{ d.seo_report.score }}/100{% endif %}</td>
+        <td><small>{{ d.created_at.strftime('%b %d, %H:%M') if d.created_at else '' }}</small></td>
+        <td><a class="btn small" href="/app/articles/{{ d.id }}">Open workspace</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty">No finished drafts. <a href="/app/generator">Write one</a>.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Published</h2>
+  {% if posts %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Article</th><th>Position</th><th>Visits 7d</th><th>Aff. clicks 7d</th><th>Rewrites</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for p in posts %}{% set s = stats.get(p.id, {}) %}{% set r = ranks.get(p.id, {}) %}
+      <tr>
+        <td>{% if p.status == 'published' %}<a href="/posts/{{ p.slug }}" target="_blank" rel="noopener">{{ p.title }}</a>{% else %}{{ p.title }}{% endif %}<br><small class="muted">{{ p.keyword }}</small></td>
+        <td>{% if r.get('recent_position') is not none %}#{{ '%.0f' % r.recent_position }}{% else %}<span class="muted">n/a</span>{% endif %}</td>
+        <td>{{ s.sessions_7d or 0 }}</td>
+        <td>{{ s.affiliate_clicks_7d or 0 }}</td>
+        <td>{{ p.rewrite_count or 0 }}</td>
+        <td><span class="tag {{ p.status }}">{{ p.status }}</span></td>
+        <td>
+          <form method="post" action="/app/posts/{{ p.id }}/status" class="inline">
+            {% if p.status == 'published' %}<input type="hidden" name="status" value="archived"><button class="btn small ghost" type="submit">Unpublish</button>
+            {% else %}<input type="hidden" name="status" value="published"><button class="btn small ghost" type="submit">Restore</button>{% endif %}
+          </form>
+          {% if p.status == 'published' %}<a class="btn small" href="/app/generator?optimize={{ p.id }}">Optimise</a>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty">Nothing published yet.</p>{% endif %}
+</section>
+{% endblock %}

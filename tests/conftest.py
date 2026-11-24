@@ -59,13 +59,19 @@ def app_graph():
 @pytest.fixture(autouse=True)
 def clean_stores():
     """The in-process store fallback is global; reset it around every test."""
-    from stores import approvals, briefs, drafts, keywords, posts
+    from middleware import cost_guard, rate_limit
+    from stores import approvals, briefs, drafts, keywords, metrics, posts, spans, users
     from stores import memory as memory_store
-    for store in (keywords, briefs, drafts, memory_store, approvals, posts):
+    stores = (keywords, briefs, drafts, memory_store, approvals, posts, metrics, spans, users)
+    for store in stores:
         store.clear_memory()
+    rate_limit.reset()
+    cost_guard.reset()
     yield
-    for store in (keywords, briefs, drafts, memory_store, approvals, posts):
+    for store in stores:
         store.clear_memory()
+    rate_limit.reset()
+    cost_guard.reset()
 
 
 @pytest.fixture(autouse=True)
