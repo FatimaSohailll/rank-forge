@@ -2,28 +2,38 @@
 {% block title %}SEO + affiliate content engine{% endblock %}
 {% block main_class %}landing{% endblock %}
 {% block content %}
-<section class="hero">
-  <p class="eyebrow">For affiliate marketers and niche bloggers</p>
-  <h1>From keyword to a ranking, earning article, with a human in charge.</h1>
-  <p class="lede">RankForge is a team of AI agents. It finds keywords worth targeting, writes and fact-checks the article,
-    adds tracked affiliate links and publishes it only when you approve. Then it watches rankings and clicks and
-    tells you what to rewrite or retarget.</p>
-  <div class="cta">
-    {% if me %}<a class="btn" href="/app/generator">Open the generator</a>
-    {% else %}<a class="btn" href="/signup">Create a free account</a> <a class="btn ghost" href="/login">Log in</a>{% endif %}
+<section class="hero-layout">
+  <div class="hero">
+    <p class="eyebrow">A little inspiration. A lot of possibility.</p>
+    <h1>Good ideas deserve<br>a <em>great article.</em></h1>
+    <p class="lede">Turn your next idea into researched, thoughtful content. Your AI writing team handles the details. You shape the story and decide when it goes live.</p>
+    <div class="cta">
+      {% if me %}<a class="btn" href="/app/generator">Write your next article ↗</a>
+      {% else %}<a class="btn" href="/signup">Start writing for free ↗</a> <a class="btn ghost" href="#how-it-works">See how it works</a>{% endif %}
+    </div>
+    <p class="muted small">Research. Write. Refine. Publish when you’re ready.</p>
   </div>
+  <aside class="hero-preview" aria-label="An example of the writing process">
+    <div class="preview-top"><span class="eyebrow">Inside your writing studio</span><span class="tag">Illustration</span></div>
+    <p class="sample-prompt">“An article about hiking gear for beginners”</p>
+    <div class="sample-paper">
+      <p class="eyebrow">From idea to first draft</p>
+      <h2>A better start to<br>your next adventure.</h2>
+      <p>Helpful advice. A clear point of view.<br>Content your readers can use.</p>
+      <div class="sample-lines" aria-hidden="true"><span></span><span></span><span></span></div>
+    </div>
+    <p class="preview-caption">Your voice. Your final say. Every time.</p>
+  </aside>
 </section>
 
-<section class="pipeline" aria-label="How it works">
+<section id="how-it-works" class="pipeline" aria-label="How it works">
   <h2>How it works</h2>
   <ol class="steps">
-    <li><strong>Keyword Scout</strong><span>Scores ideas by demand, buyer intent, competition and commission.</span></li>
-    <li><strong>Content Planner</strong><span>Reads the live top results and writes a brief with a better angle.</span></li>
-    <li><strong>Writer</strong><span>Drafts the full article in your saved tone and niche.</span></li>
-    <li><strong>Fact Checker ‖ Link Builder</strong><span>Run in parallel: claims are checked on the web, affiliate links placed by code.</span></li>
-    <li><strong>Editor</strong><span>Fixes flagged claims, audits SEO and improves the score.</span></li>
-    <li><strong>You approve</strong><span>Nothing goes live until you say so. Approval can't be faked by the model.</span></li>
-    <li><strong>Rank + Click Trackers → Optimizer</strong><span>Watches positions and affiliate clicks, then recommends a rewrite or a new target.</span></li>
+    <li><strong>Find your angle</strong><span>Discover topics your audience is looking for and plan a helpful article.</span></li>
+    <li><strong>Make a first draft</strong><span>Turn your idea into a complete article that fits your audience and tone.</span></li>
+    <li><strong>Check the details</strong><span>Review factual claims, add relevant affiliate links, and improve readability and SEO.</span></li>
+    <li><strong>Make it yours</strong><span>Read the draft, ask for changes, and publish only when you’re happy with it.</span></li>
+    <li><strong>Keep improving</strong><span>See how your articles perform and discover opportunities to refresh your content.</span></li>
   </ol>
 </section>
 

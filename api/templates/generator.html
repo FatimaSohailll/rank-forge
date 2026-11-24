@@ -3,7 +3,7 @@
 {% block page %}generator{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Article generator</h1>
+  <div><p class="eyebrow">Your writing studio</p><h1>Let’s make something worth reading.</h1><p class="muted">From a first idea to a finished article. You have the final say.</p></div>
   <button class="btn ghost small" type="button" id="new-thread">New conversation</button>
 </div>
 
@@ -11,7 +11,7 @@
      {% if optimize_post %}data-autorun-action="optimize" data-autorun-target="{{ optimize_post.id }}" data-autorun-message="Optimise my article “{{ optimize_post.title }}”"{% endif %}>
   <div id="log" class="log-area" aria-live="polite">
     <div class="msg assistant intro">
-      <p>Hi! I research keywords, write and fact-check articles, add affiliate links and publish them once you approve. Try:</p>
+      <p><strong>What are we writing today?</strong><br>Bring an idea. I’ll research it, write the article, and check the details. You can ask for changes before anything goes live.</p>
       <ul class="suggestions">
         <li><button type="button" class="chip" data-suggest="keyword ideas for hiking daypacks">keyword ideas for hiking daypacks</button></li>
         <li><button type="button" class="chip" data-suggest="write an article on best budget hiking daypacks">write an article on best budget hiking daypacks</button></li>
@@ -19,12 +19,24 @@
         <li><button type="button" class="chip" data-suggest="my site is about hiking gear for beginners, friendly tone. Remember that.">remember my niche and tone</button></li>
       </ul>
     </div>
+    {% if saved_article %}
+    <div class="msg assistant" id="saved-draft" data-draft="{{ saved_article.draft_id }}"
+         data-title="{{ saved_article.title }}" data-words="{{ saved_article.words }}"
+         data-score="{{ saved_article.seo_score if saved_article.seo_score is not none else '' }}"
+         data-workspace="{{ saved_article.workspace_url }}">
+      <p class="saved-draft-note muted small">Pick up where you left off · Your latest saved draft</p>
+      <a class="btn saved-draft-fallback" href="{{ saved_article.workspace_url }}">Review and publish your saved article</a>
+      <details class="article-preview"><summary>Read your saved article: {{ saved_article.title }}</summary>
+        <div class="article-body">{{ saved_preview | safe }}</div>
+      </details>
+    </div>
+    {% endif %}
   </div>
-  <ol id="progress" class="progress" hidden></ol>
+  <p id="editing-hint" class="editing-hint" role="status" hidden></p>
   <form id="chat-form" class="composer">
     <label class="sr-only" for="message">Message</label>
-    <textarea id="message" name="message" rows="2" maxlength="2000" placeholder="Ask for keyword ideas, an article, or how your posts are doing…" required>{{ ('write an article on ' ~ topic) if topic else '' }}</textarea>
-    <button class="btn" type="submit" id="send">Send</button>
+    <textarea id="message" name="message" rows="2" maxlength="2000" placeholder="What would you like to write about?" required>{{ ('write an article on ' ~ topic) if topic else '' }}</textarea>
+    <button class="btn" type="submit" id="send">Send ↗</button>
   </form>
   <p class="muted small">A full article takes about a minute. Publishing always asks for your approval first.</p>
 </div>

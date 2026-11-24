@@ -206,7 +206,7 @@ def publisher(state: RankForgeState) -> dict:
     log.info(json.dumps({"event": verb.lower(), "user": user_id, "post_id": post["id"], "links": len(tracked)}))
 
     return {"post_id": str(post["id"]), "post_url": url, "published_at": now, "stage": "published",
-            "reply": f"{verb}: **{title}**\n{url}\n{len(tracked)} affiliate link(s) are tracked. "
+            "reply": f"{verb}: **{title}**\n[Read your article]({url})\n{len(tracked)} affiliate link(s) are tracked. "
                      f"Clicks and views will show up in your analytics."}
 
 

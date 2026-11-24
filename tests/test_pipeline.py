@@ -266,6 +266,9 @@ def test_chat_stream_reports_progress_then_done(pipeline):
     assert steps.index("writer") < steps.index("editor")
     kind, done = events[-1]
     assert kind == "done" and "Article ready" in done["reply"]
+    assert done["article"]["draft_id"] == drafts.latest_draft("alice", "final")["id"]
+    assert done["article"]["seo_score"] >= 0
+    assert done["article"]["workspace_url"].startswith("/app/articles/")
     assert any(c["name"] == "seo_audit" for c in done["tool_calls"])      # run context works in the worker thread
 
 
