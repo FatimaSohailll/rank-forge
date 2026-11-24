@@ -97,6 +97,9 @@ def supervisor(state: RankForgeState) -> dict:
     history = _window(unsummarised, settings.history_window)
     try:
         result = llm.complete(SYSTEM_PROMPT + _context_block(state), history, max_tokens=400, schema=SCHEMA)
+    except llm.LLMBadOutput:
+        return {"route": "chat", "reply": "Sorry, I didn't quite get that. Could you say it another way?",
+                "topic": "", "location": ""}
     except llm.LLMRefusal:
         return {"route": "refuse",
                 "reply": "I can't help with that. I can help with SEO, content and affiliate marketing."}

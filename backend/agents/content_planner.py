@@ -115,7 +115,10 @@ def content_planner(state: RankForgeState) -> dict:
         f"Top competitor results:\n{serp_block}"
     )
     try:
-        raw = llm.complete(SYSTEM_PROMPT, [{"role": "user", "content": user_msg}], max_tokens=900, schema=SCHEMA)
+        raw = llm.complete(SYSTEM_PROMPT, [{"role": "user", "content": user_msg}], max_tokens=1500, schema=SCHEMA)
+    except llm.LLMBadOutput:
+        log.warning("brief output unusable for %r", keyword)
+        return {"reply": "I couldn't finish planning that article just now. Please try again in a moment."}
     except llm.LLMRefusal:
         return {"reply": "I couldn't plan an article for that topic."}
     brief = _clean(raw if isinstance(raw, dict) else {}, keyword, program_names)

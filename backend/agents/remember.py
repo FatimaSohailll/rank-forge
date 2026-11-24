@@ -52,6 +52,8 @@ def remember(state: RankForgeState) -> dict:
     try:
         out = llm.complete(SYSTEM_PROMPT, [{"role": "user", "content": state.get("user_message", "")}],
                            max_tokens=300, schema=SCHEMA)
+    except llm.LLMBadOutput:
+        return {"reply": "I couldn't update your saved profile just now. Please try again."}
     except llm.LLMRefusal:
         return {"reply": REFUSE_SENSITIVE}
     out = out if isinstance(out, dict) else {}

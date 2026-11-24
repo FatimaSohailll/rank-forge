@@ -93,7 +93,7 @@ def link_builder(state: RankForgeState) -> dict:
     try:
         out = llm.complete(SYSTEM_PROMPT + "\nThe program field must be exactly one of the program names, without the details in brackets.",
                            [{"role": "user", "content": f"Programs:\n{program_list}\n\nArticle:\n{draft}"}],
-                           max_tokens=500, schema=schema)
+                           max_tokens=800, schema=schema)
         links = out.get("links") or []
     except llm.LLMRefusal:
         links = []
