@@ -78,7 +78,7 @@ flowchart LR
     O -->|report / hold| R
 ```
 
-- **17 nodes, 3 parallel joins, 1 interrupt, 2 feedback loops** (`api/graph.py`, `api/state.py`).
+- **17 nodes, 3 parallel joins, 1 interrupt, 2 feedback loops** (`backend/graph.py`, `backend/state.py`).
 - **Parallel lanes:** Fact Checker ‖ Link Builder (Editor joins) and Rank Tracker ‖ Click Tracker (Optimizer joins).
 - **Feedback loops:** Optimizer → Content Planner → Writer (re-write; publishing replaces the live post, same URL)
   and Optimizer → Keyword Scout (re-target). `loop_count` is capped by `MAX_LOOPS` (default 3). Past the cap the
@@ -94,7 +94,7 @@ flowchart LR
   audit, Postgres. All web text is fenced as untrusted data before it reaches a prompt.
 - **One model:** `claude-haiku-5-5` for every call.
 
-### Middleware (`api/middleware/`)
+### Middleware (`backend/middleware/`)
 
 | Layer | Where | What it does |
 |---|---|---|
@@ -224,9 +224,9 @@ admin approval while a publish is pending. Swap in the instructor's 5 attack tes
 ```bash
 python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-cp .env.example api/.env          # fill in the keys below
+cp .env.example backend/.env          # fill in the keys below
 python scripts/init_db.py         # tables + demo data + demo/admin passwords (needs DATABASE_URL)
-cd api && uvicorn main:app --port 8000
+cd backend && uvicorn main:app --port 8000
 ```
 
 Open http://localhost:8000, sign up, or log in as `demo_alice` / `demo_bob` (password = `DEMO_PASSWORD`, or the one
@@ -265,7 +265,7 @@ cookies, and HTTPS public URLs. The live deployment is pending account setup and
 ## Deploy (Docker, e.g. a Hugging Face Space)
 
 ```bash
-docker build -t rankforge . && docker run -p 7860:7860 --env-file api/.env rankforge
+docker build -t rankforge . && docker run -p 7860:7860 --env-file backend/.env rankforge
 ```
 
 Hugging Face: create a **Docker** Space, push this repo to it, add the variables above as **Space secrets** (set
@@ -298,7 +298,7 @@ RUN_DB_TESTS=1 pytest tests/test_db_integration.py   # 15 tests against your rea
 ## Repo layout
 
 ```
-api/            FastAPI app, LangGraph graph, agents/, middleware/, tools/, stores/, web/ (pages), templates/, static/
+backend/        FastAPI app, LangGraph graph, agents/, middleware/, tools/, stores/, web/ (pages), templates/, static/
 db/             schema.sql (12 tables + RLS) and seed.sql (demo users, affiliate catalog, simulated metrics)
 scripts/        init_db.py, demo.py (terminal demo), benchmark.py (15-case benchmark)
 benchmark/      cases.json (+ results.md / results.json after a run)

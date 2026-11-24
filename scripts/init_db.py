@@ -1,4 +1,4 @@
-"""Apply db/schema.sql and db/seed.sql to DATABASE_URL (from api/.env), set demo/admin passwords,
+"""Apply db/schema.sql and db/seed.sql to DATABASE_URL (from backend/.env), set demo/admin passwords,
 then print row counts.
 
 Usage (from the repo root, with the venv active):  python scripts/init_db.py
@@ -16,15 +16,15 @@ import psycopg
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parent.parent
-# repo-root .env or api/.env; api/.env wins (same order as api/config.py)
-env = {**dotenv_values(ROOT / ".env"), **dotenv_values(ROOT / "api" / ".env")}
+# repo-root .env or backend/.env; backend/.env wins (same order as backend/config.py)
+env = {**dotenv_values(ROOT / ".env"), **dotenv_values(ROOT / "backend" / ".env")}
 url = env.get("DATABASE_URL", "")
 
 PLACEHOLDERS = ("YOUR-DATABASE-PASSWORD", "postgres.xxxx", ":password@")
 if not url or any(p in url for p in PLACEHOLDERS):
-    sys.exit("Set a real DATABASE_URL in api/.env first (copy .env.example to api/.env).")
+    sys.exit("Set a real DATABASE_URL in backend/.env first (copy .env.example to backend/.env).")
 
-sys.path.insert(0, str(ROOT / "api"))
+sys.path.insert(0, str(ROOT / "backend"))
 from middleware.auth import hash_password  # noqa: E402  (same hash format the app verifies)
 
 

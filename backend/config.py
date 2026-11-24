@@ -1,4 +1,4 @@
-"""Settings loaded from environment (HF Space secrets) or api/.env for local dev.
+"""Settings loaded from environment (HF Space secrets) or backend/.env for local dev.
 
 Secrets live only here and in the per-run context; they are never put in graph
 state or prompts.
@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # repo-root .env or api/.env; later files win, so api/.env overrides the root one
+        # repo-root .env or backend/.env; later files win, so backend/.env overrides the root one
         env_file=(Path(__file__).parent.parent / ".env", Path(__file__).parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",

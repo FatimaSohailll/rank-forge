@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "api"))
+sys.path.insert(0, str(ROOT / "backend"))
 
 CASES = ROOT / "benchmark" / "cases.json"
 REFUSAL = re.compile(r"can't follow instructions|outside what I do|I can't help|I can't|I cannot|I won't|"
@@ -178,7 +178,7 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING)
     from config import settings
     if not settings.anthropic_api_key:
-        sys.exit("ANTHROPIC_API_KEY is not set (api/.env). The benchmark runs against the real model.")
+        sys.exit("ANTHROPIC_API_KEY is not set (backend/.env). The benchmark runs against the real model.")
     results = run(load_cases(args.only))
     out_dir = ROOT / "benchmark"
     (out_dir / "results.json").write_text(json.dumps({"summary": summary(results), "results": results},

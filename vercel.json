@@ -4,7 +4,7 @@
   "functions": {
     "app.py": {
       "maxDuration": 300,
-      "excludeFiles": "{.venv/**,venv/**,.git/**,.pytest_cache/**,tests/**,benchmark/**,docs/**,scripts/**,.env,.env.*,api/.env,api/.env.*}"
+      "excludeFiles": "{.venv/**,venv/**,.git/**,.pytest_cache/**,tests/**,benchmark/**,docs/**,scripts/**,.env,.env.*,backend/.env,backend/.env.*}"
     }
   },
   "buildCommand": "python vercel_build.py"
