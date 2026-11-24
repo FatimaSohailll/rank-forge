@@ -42,6 +42,8 @@ def instrument(name: str, fn):
     @functools.wraps(fn)
     def node(state):
         ctx = _ctx()
+        if ctx and ctx.progress:
+            ctx.progress(name, "started")
         before = (ctx.tokens_in, ctx.tokens_out, ctx.cost_usd, len(ctx.tool_calls)) if ctx else (0, 0, 0.0, 0)
         started = time.perf_counter()
         status, error, out = "ok", None, {}
@@ -60,12 +62,21 @@ def instrument(name: str, fn):
             raise
         finally:
             if status in ("paused", "error"):
+                if ctx and ctx.progress:
+                    ctx.progress(name, status)
                 _emit(_span(name, ctx, before, started, status, error))
         out, problems = state_validator.check(name, out)
         if problems:
             status, error = "invalid", "; ".join(problems)[:500]
         elif isinstance(out, dict) and out.get("route") == "refuse":
             status = "refused"
+        if ctx and ctx.progress:
+            progress_status = "complete" if status == "ok" else status
+            expected = {"writer": "drafted", "reviser": "drafted", "content_planner": "planned",
+                        "editor": "edited", "publisher": "published"}
+            if status == "ok" and name in expected and out.get("stage") != expected[name]:
+                progress_status = "incomplete"
+            ctx.progress(name, progress_status)
         _emit(_span(name, ctx, before, started, status, error))
         return out
 

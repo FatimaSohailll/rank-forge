@@ -86,7 +86,7 @@ def _context_block(state: RankForgeState) -> str:
     return ("\n\n" + "\n\n".join(parts)) if parts else ""
 
 
-FORCED_REPLY = {"publish": "Preparing that draft for your approval.", "optimize": "Looking at that article."}
+FORCED_REPLY = {"revise": "Updating your article with your feedback.", "publish": "Preparing that draft for your approval.", "optimize": "Looking at that article."}
 
 
 def supervisor(state: RankForgeState) -> dict:

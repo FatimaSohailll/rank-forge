@@ -43,6 +43,7 @@ from agents.remember import remember
 from agents.responder import responder
 from agents.supervisor import supervisor
 from agents.writer import writer
+from agents.reviser import reviser
 from middleware.observability import instrument
 from state import RankForgeState
 from stores import approvals, db, users
@@ -72,6 +73,8 @@ def after_supervisor(state: RankForgeState) -> str | list[str]:
     route = state.get("route")
     if route in ("performance", "optimize"):
         return ["rank_tracker", "click_tracker"]       # Monitor lane runs in parallel; optimizer joins
+    if route == "revise":
+        return "reviser"
     if route == "remember":
         return "remember"
     if route == "publish":
@@ -101,7 +104,7 @@ def after_writer(state: RankForgeState) -> list[str]:
 # ---------- build ----------
 
 NODES = {
-    "guard": guard, "memory": memory_node, "supervisor": supervisor, "remember": remember,
+    "reviser": reviser, "guard": guard, "memory": memory_node, "supervisor": supervisor, "remember": remember,
     "keyword_scout": keyword_scout, "content_planner": content_planner, "writer": writer,
     "fact_checker": fact_checker, "link_builder": link_builder, "editor": editor,
     "publish_gate": publish_gate, "publisher": publisher,
@@ -120,7 +123,7 @@ def build(checkpointer):
     g.add_edge("memory", "supervisor")
     g.add_edge("remember", "responder")
     g.add_conditional_edges("supervisor", after_supervisor, [
-        "remember", "publish_gate", "keyword_scout", "content_planner", "rank_tracker", "click_tracker",
+        "reviser", "remember", "publish_gate", "keyword_scout", "content_planner", "rank_tracker", "click_tracker",
         "responder"])
     g.add_edge(["rank_tracker", "click_tracker"], "optimizer")   # join: optimizer waits for both
     g.add_conditional_edges("optimizer", after_optimizer, {
@@ -131,6 +134,7 @@ def build(checkpointer):
         "content_planner": "content_planner", "responder": "responder"})
     g.add_conditional_edges("content_planner", after_planner, {"writer": "writer", "responder": "responder"})
     g.add_conditional_edges("writer", after_writer, ["fact_checker", "link_builder", "responder"])
+    g.add_conditional_edges("reviser", after_writer, ["fact_checker", "link_builder", "responder"])
     g.add_edge(["fact_checker", "link_builder"], "editor")      # join: editor waits for both
     g.add_edge("editor", "responder")
     g.add_edge("responder", END)
@@ -183,6 +187,7 @@ def _turn_input(user_id: str, thread_id: str, message: str, action: dict | None 
         "link_notes": [],
         "degraded": False,
         "forced_route": action.get("type", ""),
+        "revision_draft_id": int(action.get("draft_id") or 0) if action.get("type") == "revise" else 0,
         "publish_draft_id": int(action.get("draft_id") or 0),
         "target_post_id": int(action.get("post_id") or 0),
         "rewrite_of": 0,
@@ -208,10 +213,11 @@ NODE_LABELS = {
     "keyword_scout": "Researched keywords",
     "content_planner": "Planned the article",
     "writer": "Wrote the draft",
+    "reviser": "Revised your article",
     "fact_checker": "Fact-checked the claims",
     "link_builder": "Added affiliate links",
     "editor": "Edited and scored the article",
-    "publish_gate": "Got your approval",
+    "publish_gate": "Ready for your approval",
     "publisher": "Published the article",
     "rank_tracker": "Read your ranking history",
     "click_tracker": "Read your traffic and clicks",
@@ -294,7 +300,7 @@ def _resume(user_id: str, token: str, decision: str, amend: dict | None, on_prog
     return _execute(user_id, resolved["thread_key"], Command(resume=payload), on_progress)
 
 
-ACTIONS = {"publish", "optimize"}
+ACTIONS = {"publish", "optimize", "revise"}
 
 
 def _handle(user_id: str, thread_id: str, message: str, on_progress=None, action: dict | None = None) -> str:
@@ -316,7 +322,7 @@ def _handle(user_id: str, thread_id: str, message: str, on_progress=None, action
 # ---------- entry points ----------
 
 def run_turn(user_id: str, thread_id: str, message: str, action: dict | None = None) -> dict:
-    """One chat turn. `action` comes from a UI button: {"type": "publish", "draft_id"} or {"type": "optimize", "post_id"}."""
+    """One chat turn. UI actions select a draft to publish/revise, or a post to optimize."""
     ctx = run_context.RunContext(run_id=uuid.uuid4().hex, user_id=user_id, thread_id=thread_id)
     token = run_context.set_run(ctx)
     try:
@@ -354,20 +360,30 @@ def stream_turn(user_id: str, thread_id: str, message: str, action: dict | None 
     events: queue.Queue = queue.Queue()
     started = time.monotonic()
 
-    def progress(node: str) -> None:
-        events.put(("progress", {"node": node, "label": NODE_LABELS[node],
-                                 "seconds": round(time.monotonic() - started, 1)}))
+    def progress(node: str, status: str = "complete") -> None:
+        if node in NODE_LABELS:
+            events.put(("progress", {"node": node, "label": NODE_LABELS[node], "status": status,
+                                     "seconds": round(time.monotonic() - started, 1)}))
+
+    ctx.progress = progress
 
     def worker() -> None:
         token = run_context.set_run(ctx)
+        failed = False
         try:
-            reply = _handle(user_id, thread_id, message, progress, action)
+            reply = _handle(user_id, thread_id, message, action=action)
         except Exception:
+            failed = True
             log.exception("streamed turn failed")
             reply = "Sorry, something went wrong while handling that. Please try again."
         finally:
             run_context.reset_run(token)
-        events.put(("done", _result(reply, ctx)))
+        result = _result(reply, ctx)
+        if ctx.article and not ctx.halted and not failed:
+            result["article"] = ctx.article
+        result["halted"] = bool(ctx.halted)
+        result["error"] = failed
+        events.put(("done", result))
 
     threading.Thread(target=worker, daemon=True, name="rankforge-turn").start()
     while True:

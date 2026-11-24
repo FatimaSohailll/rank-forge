@@ -7,6 +7,7 @@ Route = Literal[
     "refuse",            # off-topic or prompt injection
     "keyword_research",  # -> Keyword Scout
     "write_article",     # -> Planner -> Writer -> QA -> Editor
+    "revise",             # revise an owned finished draft
     "publish",           # -> Publisher (always behind human approval)
     "performance",       # -> Rank Tracker || Click Tracker -> Optimizer (report only)
     "optimize",          # -> trackers -> Optimizer, which acts: re-write (-> Planner/Writer) or re-target (-> Scout)
@@ -38,6 +39,7 @@ class RankForgeState(TypedDict, total=False):
     topic: str                  # subject/keyword the user mentioned, "" if none
     location: str               # country the user mentioned, "" if none
     forced_route: str           # set by a UI button (publish a chosen draft / optimise a chosen post): skips routing
+    revision_draft_id: int
     publish_draft_id: int       # the draft a "Publish" button asked for (0 = newest finished draft)
     target_post_id: int         # the post an "Optimise" button asked for (0 = Optimizer picks)
 

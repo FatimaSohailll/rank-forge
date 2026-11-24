@@ -23,14 +23,29 @@ Must-haves: customer page + **admin dashboard** (not just a chat box); LangGraph
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example api/.env          # fill ANTHROPIC_API_KEY, TAVILY_API_KEY, DATABASE_URL, SESSION_SECRET, ADMIN_PASSWORD
-python scripts/init_db.py         # applies db/schema.sql + db/seed.sql, sets demo/admin passwords
-cd api && uvicorn main:app --reload   # must run from api/ (flat imports)
+cp .env.example api/.env          # a repo-root .env also works (api/.env wins); fill ANTHROPIC_API_KEY, TAVILY_API_KEY,
+                                  # DATABASE_URL, SESSION_SECRET, ADMIN_PASSWORD
+python scripts/init_db.py         # applies db/schema.sql + db/seed.sql, sets demo/admin passwords (only where none is set)
+cd api && uvicorn main:app --port 8000   # must run from api/ (flat imports); then open http://localhost:8000
 ```
+**Port in use?** If `uvicorn` says `address already in use`, something else owns the port (check `ss -ltnp | grep :8000`).
+Pick another port and keep the public URL in step, because published-article links and the sitemap use `PUBLIC_SITE_URL`:
+`PUBLIC_SITE_URL=http://localhost:8001 uvicorn main:app --port 8001`. Login works on any port (the form Origin check
+compares against the request host, not `PUBLIC_SITE_URL`).
+
+**Logging in.** `demo_alice`, `demo_bob` and `admin` are login-only accounts whose passwords are stored as hashes, so
+they cannot be recovered: ask whoever ran `init_db.py` for `DEMO_PASSWORD` / `ADMIN_PASSWORD`, or just use `/signup`
+(username `[a-z0-9_]{3,32}`, password >= 8 chars; logged in immediately). `init_db.py` never overwrites an existing
+password. Setting `ADMIN_PASSWORD` in `.env` *does* reset the admin account at app startup. `demo_alice` has the richest
+data (hiking-blog profile, posts, 30 days of simulated metrics); a new account starts empty.
+
+**The database is shared.** The team uses one Supabase project, so rows you create are visible to everyone and other
+accounts already exist there (e.g. `bob`, `test_user_1`). Tests that touch Postgres use throwaway `zz_*` users and
+clean up; do not run destructive scripts against it.
 Tests (no network, DB or API key needed): `pip install -r requirements-dev.txt && pytest`.
 DB integration tests (opt-in, real `DATABASE_URL`, throwaway `zz_*` users, cleaned up; covers all stores incl. approvals/posts/clicks): `RUN_DB_TESTS=1 pytest tests/test_db_integration.py`.
 CLI demo (no DB needed, live progress): `python scripts/demo.py "write an article on best budget camping tents for families"` or `python scripts/demo.py` for interactive mode.
-Smoke test: `curl localhost:8000/health`; `POST /chat {"user_id":"some_api_user","thread_id":"t1","message":"hi"}` (login accounts like `demo_alice` need a session: use the website).
+Smoke test: `curl localhost:8000/health`; `POST /chat {"user_id":"some_api_user","thread_id":"t1","message":"hi"}` (login accounts like `demo_alice` get "log in first" without a session: use the website; `scripts/demo.py` talks to the graph directly and is not affected).
 Benchmark (live, ~$0.03): `python scripts/benchmark.py` -> `benchmark/results.md`.
 Empty `DATABASE_URL` falls back to in-memory checkpoints (state lost on restart).
 
@@ -101,15 +116,16 @@ graph stops; `graph._execute` sees the `__interrupt__` chunk and writes an `appr
   `reject`/`no`/`cancel` cancel. Matching is regex-only (no LLM), so a manipulated model cannot approve. Any other
   message gets a reminder; repeating "publish it" is *not* an approval. A bare `approve`/`reject` with nothing
   pending gets a fixed "nothing waiting" reply.
-- **API**: `GET /approvals?user_id=` lists pending (with tokens); `POST /resume {user_id, resume_token, decision:
-  approve|reject|amend, title?, slug?, meta_description?}`.
+- **API**: `GET /approvals` lists pending (with tokens); `POST /resume {resume_token, decision:
+  approve|reject|amend, title?, slug?, meta_description?}`. Both resolve the caller through `auth.resolve_api_user`:
+  login accounts need their session cookie; API-only users pass `user_id` in the query/body.
 - Resolution is atomic (`update ... where status='pending'`), owner-only and single-use; the approval is bound to the
   `draft_id` shown, so a newer draft can never slip through. `publish_gate` re-runs on resume, so it has no side effects
   before the pause.
 - `publisher` (no LLM): Markdown -> HTML with raw HTML escaped, affiliate links rewritten to `/r/{code}` with
   `rel="sponsored nofollow"`, unique slug, Article JSON-LD, post row, draft marked `published`.
 - Tracking: `/r/{code}` logs a click into `clicks.affiliate_clicks` (per post per day) and redirects; page views add to
-  `clicks.sessions` (rough: bots included). The Click Tracker/Optimizer will read these rows.
+  `clicks.sessions` (rough: bots included). The Click Tracker and Optimizer read these rows.
 
 ## Target graph (see CONTEXT.md)
 Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publisher; Rank/Click trackers on cron; Optimizer loops to Writer (rewrite) or Scout (retarget), capped by `loop_count`.
@@ -124,18 +140,32 @@ Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publi
 | Publish with human approval, public pages, `/r/{code}` click logging | done; live-tested on Postgres |
 | Rank Tracker, Click Tracker, Optimizer (both loops, loop cap, action_log), cron endpoint | done; offline-tested; **not yet run live** |
 | Middleware: observability, auth, rate limit, cost guard, retry, state validator, HITL | done; offline-tested |
-| Customer pages (dashboard, generator, my articles, workspace) | done; tested with TestClient and an HTTP smoke run |
+| Customer pages (dashboard, generator, my articles, workspace) | done; shared editorial light theme, guided draft revision and publish review in generator; offline and browser-tested |
 | Admin dashboard (analytics, users, content) | done |
 | Benchmark (10 own + 5 attack) | cases + runner done; **live run pending (needs keys)** |
 | Dockerfile, CI, cron workflow | done; Docker build verified only in CI |
-| Tests | 198 offline + 15 opt-in DB integration tests (new DB tests not yet run against Supabase) |
+| Tests | 219 offline passing + 15 opt-in DB integration tests skipped; desktop/mobile browser checks passed with simulated responses |
 | Deployment, demo GIF | to do |
+
+## Last verified (2026-11-24, after pulling increments 7-11)
+Checked from a fresh checkout against the shared Supabase DB:
+- `pip install -r requirements-dev.txt` clean (new dependency `python-multipart`); `pytest` -> **198 passed, 15 skipped**
+  (the skipped ones are the opt-in DB tests).
+- App boots on Postgres (checkpointer: Postgres). `/health`, `/`, `/login`, `/signup` -> 200; `/app` and `/admin` -> 303 to
+  `/login`; unknown post -> 404. `POST /chat` as `demo_alice` without a session -> "log in first"; as an API-only user, a
+  prompt-injection message is refused with no model call.
+- `scripts/demo.py` works with and without `--db` (refusal path, zero cost).
+- The DB already has the auth columns (`password_hash`, `disabled`); `admin`, `demo_alice`, `demo_bob` have passwords set.
+
+**Not yet verified** (do these before relying on them): signing up and running generator -> publish -> approve in a
+browser; a full live article through the new website; `python scripts/benchmark.py` (live, ~$0.03; paste the table into
+README); the 5 new opt-in DB tests (`RUN_DB_TESTS=1`); the cron/optimizer against live SERP data; the Docker build.
 
 ## Decisions
 - Real integrations only: Tavily (search/fetch/fact-check), Google Autocomplete + Trends (keywords), own `/r/{code}` redirect (clicks), own site pages (publish). Rank tracking: SERP position check; Search Console optional later.
 - Keyword demand is an **estimate**, labelled as such; no fabricated volume numbers.
 - Single model: `claude-haiku-5-5` everywhere (hackathon rule + spend limit); the cost guard is therefore mandatory, not optional.
-- Short-term memory trims by summarising older turns (canvas), replacing the current plain 12-message window.
+- Short-term memory trims by summarising older turns (canvas) instead of just dropping them.
 - Publish is a human-in-the-loop step: the draft is shown, and only an explicit user approval publishes.
 - Anything fetched from the web is wrapped as untrusted data before it reaches a prompt.
 
@@ -164,7 +194,6 @@ Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publi
 - Rate limits and the Tavily daily cap are per process; the LLM daily ceiling is reloaded from `spans`.
 - Rankings are Tavily-index positions (`source='tavily'`), an approximation of Google; seeded history is simulated.
 - Clicks are first-party (views incl. bots, `/r/{code}` redirects); no GA4 / network conversion data.
-- `guard.py` blocks "api key" / "environment variable" questions (false positives on SEO questions).
 - `llm.py` feature-flag fallbacks are process-global.
 - The app connects as a superuser (bypasses RLS); filter-by-`user_id` is the isolation. Use a non-superuser role in production.
 - `PUBLIC_SITE_URL` must be the deployed URL, or post links, the sitemap and rank checks are wrong.
@@ -173,3 +202,30 @@ Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publi
 - Keyword competition is only checked for the top 3 ideas, so others show `n/a`.
 - Fixed in increment 7-11: the publisher used the current thread's brief (wrong keyword/meta when publishing an
   older draft); it now uses the draft's own brief. Concurrent publishes with the same title no longer crash on the slug.
+
+## Writing studio refresh (2026-11-24)
+- Jinja/vanilla JS retained; shared warm light theme, with no OS dark-mode override.
+- `reviser` adds an explicit `revise` action targeting an owned final draft. It loads that draft’s brief,
+  preserves existing links/disclosure, then joins normal QA/editor to save a new final version. Live posts
+  stay unchanged until the usual publish approval; rewrite briefs preserve `rewrite_of`.
+- Streaming done events optionally include structured `article` metadata, plus `halted`/`error` flags.
+  Metadata is per-run and only set after a successful editor result, never inferred from reply text.
+- Instrumented nodes emit started/completed/failure progress. The generator groups parallel checks, hides
+  internal routing, and retains a compact summary. Publish → review → confirm uses existing approval tokens;
+  Back to editing rejects the pending request before accepting changes.
+- Browser checks use local in-memory accounts and simulated API responses; no live model/DB spend.
+
+- Saved-draft recovery: `/app/generator` offers the latest owned final draft after refresh (excluded when starting a new topic or optimizer run). Publish review/cancel/confirm and refresh recovery were also browser-tested against the real local in-memory API.
+
+## Vercel deployment preparation
+- Root `app.py` preserves flat API imports; root runtime requirements and `.python-version` select Python 3.12.
+- `vercel.json` uses FastAPI with a 300-second duration and retains templates/static assets in the function.
+- On Vercel, startup rejects missing database/session settings, insecure cookies, and non-public HTTP URLs.
+  The public URL/origins default to `VERCEL_PROJECT_PRODUCTION_URL`; explicit settings win. Local defaults remain unchanged.
+- GitHub import uses production branch `deploy/vercel` and the shared Supabase database. No migrations or seeds.
+  Account setup, environment-variable entry, and live verification are described in `docs/VERCEL.md`.
+- Deployment is prepared, not verified live. Preserve existing admin passwords; monitoring stays disabled initially.
+
+- `vercel_build.py` bundles textstat’s NLTK cmudict data in `.nltk_data`; the root entry point stages the bundled data in a private /tmp directory and sets its lookup path, avoiding first-request downloads on Vercel’s read-only filesystem.
+
+- Deployment validation: 219 offline tests pass (15 DB tests skipped); root entry/asset checks pass; the bundled readability dictionary was exercised with runtime downloads disabled. Vercel account import and live smoke checks remain pending.

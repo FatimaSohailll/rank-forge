@@ -85,6 +85,9 @@ def link_builder(state: RankForgeState) -> dict:
     if not draft or not chosen:
         return {"linked_draft": draft, "link_notes": ["No affiliate programs matched this article."]}
 
+    if state.get("revision_draft_id") and _MD_LINK.search(draft):
+        return {"linked_draft": draft, "link_notes": []}
+
     program_list = "\n".join(f"- {n} ({p['network']}, {p['commission_pct']}% commission)" for n, p in chosen.items())
     schema = _schema_for(list(chosen))
     try:

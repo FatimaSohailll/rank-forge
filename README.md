@@ -37,6 +37,21 @@ agent API, the customer website, the admin dashboard and the public article page
 | `/admin/content` | admin | **Content management**: every post; unpublish/restore |
 | `/posts/{slug}` | public | Published article (strict CSP, JSON-LD, canonical); views are counted |
 
+### Writing studio
+
+The website uses a consistent light theme. The generator shows plain-language progress and a finished-article
+card with **Publish** and **Continue editing**. Continue editing applies chat feedback to that exact draft,
+runs fact/link/SEO checks again, and saves a new version. Earlier drafts remain available in My articles. Refreshing the generator also restores actions for your latest
+finished, unpublished draft, so you can publish it without generating it again.
+Publish opens a review step; **Confirm and publish** is still required. **Back to editing** cancels the pending
+approval before accepting revisions. Revisions of a live-post rewrite preserve its replacement target and URL.
+
+`POST /chat/stream` accepts `action="revise"` with a required draft `target_id` and feedback in `message`.
+Progress events retain `node`, `label`, and `seconds` and add `status` (started, complete, incomplete, or a failure
+status). Successful article turns include an `article` object in the done event (`draft_id`, `title`, `words`,
+`seo_score`, `workspace_url`); other turns omit it. Done events also include `halted` and `error` flags.
+The non-streaming `/chat` response shape remains unchanged.
+
 ## Architecture
 
 ```mermaid
@@ -46,6 +61,9 @@ flowchart LR
     G --> M[memory<br/>profile + summary] --> S{supervisor}
     S -->|remember| REM[remember] --> R
     S -->|keyword_research| KS[keyword_scout] --> R
+    S -->|revise draft| RV[reviser]
+    RV --> FC
+    RV --> LB
     S -->|write_article| KS2[keyword_scout] --> CP[content_planner] --> W[writer]
     W --> FC[fact_checker] --> E[editor]
     W --> LB[link_builder] --> E
@@ -60,7 +78,7 @@ flowchart LR
     O -->|report / hold| R
 ```
 
-- **16 nodes, 3 parallel joins, 1 interrupt, 2 feedback loops** (`api/graph.py`, `api/state.py`).
+- **17 nodes, 3 parallel joins, 1 interrupt, 2 feedback loops** (`api/graph.py`, `api/state.py`).
 - **Parallel lanes:** Fact Checker ‖ Link Builder (Editor joins) and Rank Tracker ‖ Click Tracker (Optimizer joins).
 - **Feedback loops:** Optimizer → Content Planner → Writer (re-write; publishing replaces the live post, same URL)
   and Optimizer → Keyword Scout (re-target). `loop_count` is capped by `MAX_LOOPS` (default 3). Past the cap the
@@ -233,6 +251,16 @@ Never commit a real `.env` (it is git-ignored). **Upgrading an existing database
 ```bash
 python scripts/demo.py            # then: keyword ideas for hiking daypacks / write an article on ... / publish it / approve
 ```
+
+## Deploy to Vercel
+
+Import `FatimaSohailll/rank-forge` through Vercel's GitHub integration, use the repository root and FastAPI
+preset, and set `deploy/vercel` as the production branch. Python 3.12, the entry point, and the 300-second
+function limit are configured in the repository. Keep install/build defaults; no frontend build is needed.
+
+Follow [the Vercel deployment guide](docs/VERCEL.md) for environment variables, domain setup, and live checks.
+It reuses Supabase without reseeding. Vercel requires a stable `SESSION_SECRET`, `DATABASE_URL`, secure
+cookies, and HTTPS public URLs. The live deployment is pending account setup and verification.
 
 ## Deploy (Docker, e.g. a Hugging Face Space)
 

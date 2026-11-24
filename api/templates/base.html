@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="color-scheme" content="light">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}RankForge{% endblock %} · RankForge</title>
   <meta name="description" content="RankForge: AI agents that research, write, fact-check, publish and optimise SEO affiliate articles.">
@@ -10,7 +11,7 @@
 </head>
 <body data-user="{{ me.user_id if me else '' }}" data-page="{% block page %}{% endblock %}">
   <header class="topbar">
-    <a class="brand" href="{{ '/app' if me else '/' }}"><span class="logo" aria-hidden="true">▲</span> RankForge</a>
+    <a class="brand" href="{{ '/app' if me else '/' }}"><span class="logo" aria-hidden="true">↗</span> RankForge</a>
     <nav>
       {% if me %}
         <a href="/app" {% if path == '/app' %}aria-current="page"{% endif %}>Dashboard</a>
@@ -28,7 +29,7 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="site-footer">
-    RankForge · AI-4016 Design to Production, group 06 · keyword scores and demo metrics are estimates or simulated, never claimed as real search volumes.
+    RankForge · Thoughtful content, from idea to publish. Keyword scores are estimates; demo metrics are simulated.
   </footer>
 </body>
 </html>

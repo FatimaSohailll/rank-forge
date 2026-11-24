@@ -168,3 +168,21 @@ def test_bootstrap_admin(monkeypatch):
     monkeypatch.setattr(settings, "admin_password", "admin-pass-123")
     auth.bootstrap_admin()
     assert auth.login("admin", "admin-pass-123")["is_admin"]
+
+
+def test_generator_recovers_owned_final_draft_after_refresh(client):
+    login(client)
+    mine = drafts.save_draft('alice', None, 'final', '# My saved article\n\n<script>bad()</script>',
+                             seo_report={'score': 88, 'stats': {'words': 200}})
+    drafts.save_draft('bob', None, 'final', '# Private article\n\nPrivate text')
+    drafts.save_draft('alice', None, 'draft', '# Unfinished article\n\nPartial text')
+    page = client.get('/app/generator')
+    assert 'id="saved-draft"' in page.text
+    assert f'data-draft="{mine}"' in page.text
+    assert 'Review and publish your saved article' in page.text
+    assert 'Private article' not in page.text and 'Unfinished article' not in page.text
+    assert '<script>bad()</script>' not in page.text and '&lt;script&gt;' in page.text
+    # Starting a different topic should not offer an unrelated article.
+    assert 'id="saved-draft"' not in client.get('/app/generator?topic=camping').text
+    drafts.set_stage('alice', mine, 'published')
+    assert 'id="saved-draft"' not in client.get('/app/generator').text

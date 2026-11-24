@@ -37,7 +37,7 @@
 
   async function pendingApprovals() {
     const res = await fetch("/approvals", { credentials: "same-origin" });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error("Could not check pending approvals. Please try again.");
     return (await res.json()).approvals || [];
   }
 
@@ -70,7 +70,7 @@
         });
         if (!data) continue;                       // keepalive comment
         const parsed = JSON.parse(data);
-        if (event === "progress") onProgress(parsed.label, parsed.seconds);
+        if (event === "progress") onProgress(parsed.label, parsed.seconds, parsed);
         if (event === "done") done = parsed;
       }
     }
@@ -111,10 +111,33 @@
     const form = $("#chat-form");
     const input = $("#message");
     const log = $("#log");
-    const progress = $("#progress");
-    const send = $("#send");
     const chat = $(".chat");
     let thread = sessionStorageGet("rf-thread") || newThread();
+    let busy = false;
+    let editingDraft = null;
+    let activeCard = null;
+    let pendingBox = null;
+    const editingHint = $("#editing-hint");
+
+    function setBusy(value) {
+      busy = value;
+      $$("button", chat).forEach((button) => { button.disabled = value; });
+      $("#new-thread").disabled = value;
+      input.disabled = value;
+      form.setAttribute("aria-busy", String(value));
+    }
+    function clearEditing() {
+      editingDraft = null;
+      editingHint.hidden = true;
+      input.placeholder = "What would you like to write about?";
+    }
+    function beginEditing(article) {
+      editingDraft = article;
+      editingHint.textContent = "Editing “" + article.title + "” · Tell us what you’d like to change.";
+      editingHint.hidden = false;
+      input.placeholder = "For example: shorten the introduction, or make the tone more friendly…";
+      input.focus();
+    }
 
     function sessionStorageGet(key) { try { return sessionStorage.getItem(key); } catch (e) { return null; } }
     function newThread() {
@@ -124,8 +147,14 @@
     }
 
     $("#new-thread").addEventListener("click", () => {
+      if (busy) return;
       thread = newThread();
-      $$(".msg:not(.intro)", log).forEach((m) => m.remove());
+      log.replaceChildren();
+      clearEditing();
+      activeCard = null;
+      pendingBox = null;
+      input.value = "";
+      input.focus();
     });
 
     $$("[data-suggest]").forEach((b) => b.addEventListener("click", () => {
@@ -146,53 +175,198 @@
       return m;
     }
 
-    async function offerApproval(afterNode) {
-      const mine = (await pendingApprovals()).filter((a) => a.thread_key === USER + ":" + thread);
-      if (!mine.length) return;
-      const box = el("div", "approval");
-      box.dataset.token = mine[0].resume_token;
-      const actions = el("div", "actions");
-      const yes = el("button", "btn small", "Approve and publish");
-      yes.dataset.resume = "approve";
-      const no = el("button", "btn small ghost", "Reject");
-      no.dataset.resume = "reject";
-      actions.append(yes, no);
-      box.append(actions, el("div", "result"));
-      afterNode.appendChild(box);
+    function retireCard() {
+      if (!activeCard) return;
+      const actions = $(".article-actions", activeCard);
+      if (actions) actions.hidden = true;
+      activeCard.classList.add("previous-version");
     }
 
+    function articleCard(node, article) {
+      retireCard();
+      clearEditing();
+      const card = el("section", "article-ready");
+      card.append(el("p", "eyebrow", "Your article is ready"), el("h2", "", article.title));
+      card.append(el("p", "article-stats", article.words + " words · " + (article.seo_score == null ? "Not scored yet" : "SEO score " + article.seo_score + "/100") + " · Saved as a draft"));
+      const actions = el("div", "article-actions");
+      const publish = el("button", "btn", "Publish");
+      publish.type = "button";
+      publish.addEventListener("click", () => run("Review this article for publishing", "publish", article.draft_id));
+      const edit = el("button", "btn ghost", "Continue editing");
+      edit.type = "button";
+      edit.addEventListener("click", () => beginEditing(article));
+      const view = el("a", "text-link", "Open full workspace ↗");
+      view.href = article.workspace_url;
+      actions.append(publish, edit, view);
+      card.append(actions, el("p", "muted small", "Only you decide when it goes live."));
+      node.prepend(card);
+      activeCard = card;
+    }
+
+    async function offerApproval(afterNode) {
+      const mine = (await pendingApprovals()).filter((a) => a.thread_key === USER + ":" + thread);
+      if (!mine.length) {
+        if (pendingBox) { pendingBox.remove(); pendingBox = null; }
+        return false;
+      }
+      if (pendingBox) pendingBox.remove();
+      const approval = mine[0];
+      const box = el("section", "approval publish-review");
+      pendingBox = box;
+      if (activeCard) $(".article-actions", activeCard).hidden = true;
+      clearEditing();
+      box.dataset.token = approval.resume_token;
+      box.append(el("h2", "", "Ready to go live?"));
+      box.append(el("p", "", "Review the article above before publishing it to your public RankForge blog."));
+      if (approval.action.replaces_title) {
+        box.append(el("p", "note", "This replaces your live article “" + approval.action.replaces_title + "” at the same address."));
+      }
+      const view = el("a", "text-link", "Review the exact article ↗");
+      view.href = "/app/articles/" + approval.action.draft_id;
+      view.target = "_blank";
+      view.rel = "noopener";
+      box.append(view);
+      const actions = el("div", "actions");
+      const yes = el("button", "btn", "Confirm and publish");
+      const no = el("button", "btn ghost", "Back to editing");
+      yes.type = no.type = "button";
+      const out = el("div", "result");
+      out.setAttribute("aria-live", "polite");
+      async function decide(decision) {
+        if (busy) return;
+        setBusy(true);
+        try {
+          const data = await postJSON("/resume", { user_id: USER, resume_token: approval.resume_token, decision });
+          // Refresh approval state before enabling edits; a failed request must not bypass the gate.
+          const stillPending = (await pendingApprovals()).some((a) => a.resume_token === approval.resume_token);
+          out.innerHTML = data.reply_html || "";
+          if (stillPending) return;
+          actions.hidden = true;
+          pendingBox = null;
+          if (decision === "reject") {
+            const article = {draft_id: approval.action.draft_id, title: approval.action.title};
+            if (activeCard) $(".article-actions", activeCard).hidden = false;
+            beginEditing(article);
+          } else {
+            retireCard();
+          }
+        } catch (err) {
+          out.textContent = err.message;
+        } finally { setBusy(false); }
+      }
+      yes.addEventListener("click", () => decide("approve"));
+      no.addEventListener("click", () => decide("reject"));
+      actions.append(yes, no);
+      box.append(actions, out);
+      afterNode.appendChild(box);
+      return true;
+    }
+
+    const stageMap = {
+      keyword_scout: ["research", "Researching your topic", "Topic researched"],
+      content_planner: ["plan", "Planning your article", "Article planned"],
+      writer: ["write", "Writing your article", "Article written"],
+      reviser: ["write", "Updating your article", "Changes applied"],
+      fact_checker: ["checks", "Checking facts and links", "Facts and links reviewed"],
+      link_builder: ["checks", "Checking facts and links", "Facts and links reviewed"],
+      editor: ["polish", "Polishing your article", "Article polished"],
+      publisher: ["publish", "Publishing your article", "Article published"],
+      rank_tracker: ["performance", "Reviewing your article performance", "Performance reviewed"],
+      click_tracker: ["performance", "Reviewing your article performance", "Performance reviewed"],
+      optimizer: ["recommend", "Finding opportunities to improve", "Recommendations ready"],
+      remember: ["remember", "Saving your preferences", "Preferences saved"]
+    };
+
     async function run(message, action, target) {
+      if (busy) return;
+      if (pendingBox && action === "revise") {
+        input.value = message;
+        input.focus();
+        return;
+      }
       addMessage("user", message);
-      send.disabled = true;
-      progress.replaceChildren();
-      progress.hidden = false;
-      const working = el("li", "working", "Working…");
-      progress.appendChild(working);
+      setBusy(true);
+      const task = el("section", "turn-progress");
+      task.setAttribute("aria-label", "Article progress");
+      const status = el("p", "progress-heading", "Getting started…");
+      const steps = el("ol", "progress-steps");
+      task.append(status, steps);
+      log.appendChild(task);
+      const nodes = new Map();
+      const rows = new Map();
+      let interrupted = false;
       try {
         const payload = { user_id: USER, thread_id: thread, message: message };
         if (action) { payload.action = action; payload.target_id = Number(target); }
-        const done = await streamChat(payload, (label, secs) => {
-          const li = el("li", "", label + " (" + secs.toFixed(1) + "s)");
-          progress.insertBefore(li, working);
+        const done = await streamChat(payload, (label, secs, event) => {
+          const stage = stageMap[event.node];
+          if (!stage) return;
+          nodes.set(event.node, event.status || "complete");
+          const [key, workingLabel, completeLabel] = stage;
+          let row = rows.get(key);
+          if (!row) { row = el("li", "working", workingLabel); steps.append(row); rows.set(key, row); }
+          const related = Object.keys(stageMap).filter((n) => stageMap[n][0] === key);
+          const required = key === "checks" ? ["fact_checker", "link_builder"] :
+            key === "performance" ? ["rank_tracker", "click_tracker"] : related.filter((n) => nodes.has(n));
+          const failed = required.some((n) => nodes.has(n) && !["started", "complete"].includes(nodes.get(n)));
+          const complete = required.every((n) => nodes.get(n) === "complete");
+          row.className = failed ? "stopped" : complete ? "complete" : "working";
+          row.textContent = failed ? workingLabel + " — needs attention" : complete ? completeLabel : workingLabel + "…";
+          if (failed) interrupted = true;
+          status.textContent = failed ? "This step needs attention" : workingLabel + "…";
+          row.scrollIntoView({block: "nearest"});
         });
+        if (done.halted || done.error) interrupted = true;
+        steps.querySelectorAll(".working").forEach((row) => { row.className = "stopped"; row.textContent += " — not completed"; interrupted = true; });
+        status.textContent = interrupted ? "Stopped — see the message below" : done.article ? "Ready for your review" : "Finished";
+        if (!rows.size) task.remove();
         const node = addMessage("assistant", "", done.reply_html);
+        if (done.article) {
+          // Keep the article itself as a readable, collapsible preview.
+          const preview = el("details", "article-preview");
+          preview.open = true;
+          preview.append(el("summary", "", "Read your article"));
+          const content = el("div", "article-body");
+          while (node.firstChild) content.appendChild(node.firstChild);
+          preview.append(content);
+          node.append(preview);
+          articleCard(node, done.article);
+        }
         await offerApproval(node);
       } catch (err) {
-        addMessage("assistant error", err.message);
+        status.textContent = "Connection interrupted — your saved drafts are safe";
+        steps.querySelectorAll(".working").forEach((row) => { row.className = "stopped"; });
+        addMessage("assistant error", err.message + " Check My articles before retrying.");
+        if (action === "revise") input.value = message;
       } finally {
-        progress.hidden = true;
-        send.disabled = false;
+        setBusy(false);
         input.focus();
       }
     }
 
     form.addEventListener("submit", (e) => {
       e.preventDefault();
+      if (busy) return;
       const message = input.value.trim();
       if (!message) return;
       input.value = "";
-      run(message);
+      run(message, editingDraft ? "revise" : undefined, editingDraft ? editingDraft.draft_id : undefined);
     });
+
+    const savedDraft = $("#saved-draft");
+    if (savedDraft) {
+      $(".saved-draft-fallback", savedDraft).remove();
+      articleCard(savedDraft, {
+        draft_id: Number(savedDraft.dataset.draft), title: savedDraft.dataset.title,
+        words: Number(savedDraft.dataset.words),
+        seo_score: savedDraft.dataset.score === "" ? null : Number(savedDraft.dataset.score),
+        workspace_url: savedDraft.dataset.workspace
+      });
+    }
+
+    if (!chat.dataset.autorunAction) {
+      offerApproval(log).catch(() => { /* existing drafts remain available in My articles */ });
+    }
 
     if (chat.dataset.autorunAction) {
       run(chat.dataset.autorunMessage, chat.dataset.autorunAction, chat.dataset.autorunTarget);

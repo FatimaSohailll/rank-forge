@@ -45,7 +45,19 @@ def dashboard(request: Request, me: dict = Depends(require_user)):
 @router.get("/generator")
 def generator(request: Request, me: dict = Depends(require_user), optimize: int = 0, topic: str = ""):
     post = posts.get_for_user(me["user_id"], optimize) if optimize else None
-    return render(request, "generator.html", {"optimize_post": post, "topic": topic[:120]})
+    # Recover a saved draft after refresh or a server restart without inferring it from chat text.
+    saved = drafts.latest_draft(me["user_id"], "final") if not post and not topic else None
+    saved_article, saved_preview = None, ""
+    if saved:
+        from agents.publish import split_title
+        title, body = split_title(saved["body"], "Your saved article")
+        report = saved.get("seo_report") or {}
+        saved_article = {"draft_id": saved["id"], "title": title,
+                         "words": (report.get("stats") or {}).get("words") or len(body.split()),
+                         "seo_score": report.get("score"), "workspace_url": f"/app/articles/{saved['id']}"}
+        saved_preview = render_html(body)
+    return render(request, "generator.html", {"optimize_post": post, "topic": topic[:120],
+                                               "saved_article": saved_article, "saved_preview": saved_preview})
 
 
 @router.get("/articles")

@@ -3,6 +3,7 @@
 Set once per /chat call. Tools and LLM wrappers read user_id from here — never
 from model-generated arguments — which is what keeps users isolated.
 """
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 
@@ -18,6 +19,9 @@ class RunContext:
     searches: int = 0           # Tavily credits spent this run
     tool_calls: list[dict] = field(default_factory=list)
     halted: str = ""            # set by the cost guard when a spend ceiling stops the run
+
+    article: dict | None = None
+    progress: Callable[[str, str], None] | None = None
 
     def add_usage(self, tokens_in: int, tokens_out: int, cost: float) -> None:
         self.tokens_in += tokens_in

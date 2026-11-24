@@ -27,7 +27,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from config import settings
 import graph
@@ -47,6 +47,7 @@ log = logging.getLogger("rankforge")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.validate_deployment()
     graph.init()
     auth.bootstrap_admin()
     yield
@@ -94,7 +95,9 @@ async def on_validation_error(request: Request, exc: RequestValidationError):
                            for e in exc.errors())
         return chat_error(f"Sorry, I couldn't read that request (check: {fields}). "
                           "Send JSON with user_id, thread_id and message.")
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    # Model-level validators may include a ValueError in ctx, which is not JSON serializable.
+    errors = [{k: v for k, v in error.items() if k != "ctx"} for error in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 @app.exception_handler(LoginRedirect)
@@ -116,9 +119,15 @@ class ChatRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=64)
     thread_id: str = Field(min_length=1, max_length=64)
     message: str = Field(min_length=1, max_length=2000)
-    # Optional UI-button actions: publish a chosen draft, or optimise a chosen post.
-    action: Literal["publish", "optimize"] | None = None
+    # Optional UI-button actions: publish/revise a chosen draft, or optimise a post.
+    action: Literal["publish", "optimize", "revise"] | None = None
     target_id: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def revision_needs_draft(self):
+        if self.action == "revise" and self.target_id is None:
+            raise ValueError("Choose a draft to revise")
+        return self
 
     @field_validator("user_id", "thread_id", "message", mode="before")
     @classmethod
@@ -143,6 +152,8 @@ def health() -> str:
 
 
 def _action(req: ChatRequest) -> dict | None:
+    if req.action == "revise":
+        return {"type": "revise", "draft_id": req.target_id}
     if req.action == "publish":
         return {"type": "publish", "draft_id": req.target_id or 0}
     if req.action == "optimize":
