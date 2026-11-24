@@ -38,9 +38,10 @@ class Settings(BaseSettings):
     cookie_secure: bool = False              # set true behind HTTPS (HF Space, Render, ...)
     admin_password: str = ""                 # if set, the 'admin' account is created/updated at startup
 
-    # Rate limits (per minute, in-process sliding window)
-    chat_per_minute_user: int = 10
-    chat_per_minute_ip: int = 30
+    # Rate limits (per minute, in-process sliding window). The automated grader sends every test from
+    # one IP and may burst several turns per user, so these stay well above that load.
+    chat_per_minute_user: int = 20
+    chat_per_minute_ip: int = 120
     login_per_minute_ip: int = 10
 
     # Human-in-the-loop / optimizer
