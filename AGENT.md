@@ -222,7 +222,7 @@ README); the 5 new opt-in DB tests (`RUN_DB_TESTS=1`); the cron/optimizer agains
 - `vercel.json` uses FastAPI with a 300-second duration and retains templates/static assets in the function.
 - On Vercel, startup rejects missing database/session settings, insecure cookies, and non-public HTTP URLs.
   The public URL/origins default to `VERCEL_PROJECT_PRODUCTION_URL`; explicit settings win. Local defaults remain unchanged.
-- GitHub import uses production branch `deploy/vercel` and the shared Supabase database. No migrations or seeds.
+- GitHub import uses production branch `main` and the shared Supabase database. No migrations or seeds.
   Account setup, environment-variable entry, and live verification are described in `docs/VERCEL.md`.
 - Deployment is prepared, not verified live. Preserve existing admin passwords; monitoring stays disabled initially.
 

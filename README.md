@@ -255,7 +255,7 @@ python scripts/demo.py            # then: keyword ideas for hiking daypacks / wr
 ## Deploy to Vercel
 
 Import `FatimaSohailll/rank-forge` through Vercel's GitHub integration, use the repository root and FastAPI
-preset, and set `deploy/vercel` as the production branch. Python 3.12, the entry point, and the 300-second
+preset, and keep `main` as the production branch. Python 3.12, the entry point, and the 300-second
 function limit are configured in the repository. Keep install/build defaults; no frontend build is needed.
 
 Follow [the Vercel deployment guide](docs/VERCEL.md) for environment variables, domain setup, and live checks.

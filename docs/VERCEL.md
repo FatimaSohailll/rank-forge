@@ -1,7 +1,7 @@
 # Deploy RankForge to Vercel
 
 This deploys the complete FastAPI website and streaming agent API as one Python 3.12 function.
-The production branch is `deploy/vercel`; the existing Supabase database is reused without seeding or migrations.
+The production branch is `main`; the existing Supabase database is reused without seeding or migrations.
 
 ## 1. Import the GitHub repository
 
@@ -11,10 +11,9 @@ The production branch is `deploy/vercel`; the existing Supabase database is reus
 3. Use project name `rank-forge` if available (otherwise keep Vercel's suggested name).
 4. Set **Framework Preset: FastAPI**, **Root Directory: `./`**. Keep the install/build defaults and do not
    set a frontend output directory. The repository supplies its build command automatically. The root `app.py`, `requirements.txt`, and `.python-version` configure Python.
-5. Add the environment variables below before deploying. If the import initially uses the default Git branch,
-   first finish creating the project, change its Production Branch to `deploy/vercel` under Settings →
-   Environments → Production → Branch Tracking (or the Git settings in older dashboards), then deploy that branch.
-   Only the deployment built from `deploy/vercel` is the release to validate.
+5. Add the environment variables below before deploying. Vercel uses the repository's default branch (`main`)
+   as the Production Branch; confirm it under Settings → Environments → Production → Branch Tracking (or the
+   Git settings in older dashboards). Only the deployment built from `main` is the release to validate.
 
 ## 2. Environment variables
 
@@ -62,7 +61,7 @@ Production startup rejects missing database/session configuration, insecure cook
 
 ## 3. Check the release
 
-- Confirm the deployment uses the expected `deploy/vercel` commit and the function duration is 300 seconds.
+- Confirm the deployment uses the latest `main` commit and the function duration is 300 seconds.
   Fluid compute must be enabled; the Hobby maximum is 300 seconds.
 - Open `/health`, `/`, `/login`, `/signup`, `/static/app.css`, and `/static/app.js`.
   Confirm the blue theme and that unauthenticated `/app` redirects to login.
