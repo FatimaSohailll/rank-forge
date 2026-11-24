@@ -7,6 +7,8 @@
   <a class="btn" href="/app/generator">New article</a>
 </div>
 
+{% if has_simulated %}<p class="note" role="note">Demo data: this dashboard includes simulated rankings, visits, and affiliate clicks. These are illustrative performance scenarios.</p>{% endif %}
+
 <section class="kpis" aria-label="Last 7 days">
   <div class="kpi"><span class="label">Published articles</span><span class="value">{{ published }}</span></div>
   <div class="kpi"><span class="label">Visits, 7 days</span><span class="value">{{ totals.sessions_7d }}</span>
@@ -45,7 +47,7 @@
     {% for r in rows %}
       <tr>
         <td><a href="/posts/{{ r.slug }}" target="_blank" rel="noopener">{{ r.title }}</a><br><small class="muted">{{ r.keyword }}</small></td>
-        <td>{% if r.rank.get('recent_position') is not none %}#{{ '%.0f' % r.rank.recent_position }}{% if r.rank.get('prior_position') is not none %}<small class="muted"> was #{{ '%.0f' % r.rank.prior_position }}</small>{% endif %}{% if r.rank.source == 'simulated' %} <span class="tag">simulated</span>{% endif %}{% else %}<span class="muted">n/a</span>{% endif %}</td>
+        <td>{% if r.rank.get('recent_position') is not none %}#{{ '%.0f' % r.rank.recent_position }}{% if r.rank.get('prior_position') is not none %}<small class="muted"> was #{{ '%.0f' % r.rank.prior_position }}</small>{% endif %}{% if r.rank.has_simulated or r.rank.source == 'simulated' %} <span class="tag">simulated</span>{% endif %}{% else %}<span class="muted">n/a</span>{% endif %}</td>
         <td>{{ r.clicks.sessions_7d or 0 }}</td>
         <td>{{ r.clicks.affiliate_clicks_7d or 0 }}</td>
         <td><span class="decision {{ 'escalate' if r.escalate else r.decision }}">{{ 'needs you' if r.escalate else r.decision }}</span><br><small>{{ r.reason }}</small></td>

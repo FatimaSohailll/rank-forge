@@ -38,7 +38,8 @@ def summarise(rows: list[dict], today: date | None = None) -> list[dict]:
                     "recent_position": _avg(window(0, RECENT_DAYS - 1)),
                     "prior_position": _avg(window(*PRIOR_DAYS)),
                     "days_tracked": len({_as_date(r["date"]) for r in rs}),
-                    "source": rs[-1].get("source", "")})
+                    "source": rs[-1].get("source", ""),
+                    "has_simulated": any(r.get("source") == "simulated" for r in rs)})
     return out
 
 

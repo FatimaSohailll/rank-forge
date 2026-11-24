@@ -105,8 +105,8 @@ def _report(rows: list[dict]) -> str:
     if any(r["decision"] != "hold" for r in rows):
         lines.append("\nSay **optimize** (or e.g. \"rewrite the tent article\") and I'll act on the top "
                      "recommendation. A rewrite replaces the live post only after you approve it.")
-    lines.append("_Rankings marked simulated in the demo data are not real Google positions._"
-                 if any(r["rank"].get("source") == "simulated" for r in rows) else "")
+    lines.append("_Demo data: this report includes simulated rankings, visits, and affiliate clicks; these are not real performance results._"
+                 if any((r["rank"].get("has_simulated") or r["rank"].get("source") == "simulated") for r in rows) else "")
     return "\n".join(l for l in lines if l)
 
 

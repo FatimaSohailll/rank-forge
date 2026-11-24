@@ -34,6 +34,7 @@ def dashboard(request: Request, me: dict = Depends(require_user)):
     my_posts = posts.list_for_user(uid)
     return render(request, "dashboard.html", {
         "rows": rows, "totals": totals,
+        "has_simulated": any(r["rank"].get("has_simulated") or r["rank"].get("source") == "simulated" for r in rows),
         "published": sum(1 for p in my_posts if p["status"] == "published"),
         "finals": drafts.list_drafts(uid, "final", limit=5),
         "keywords": keywords.list_keywords(uid, limit=8),

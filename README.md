@@ -123,6 +123,13 @@ Design intent is in [`CONTEXT.md`](CONTEXT.md); the contributor guide and module
 | 10 | Admin dashboard: users, content, analytics | Done |
 | 11 | Benchmark (10 own + 5 attack tests), Dockerfile, CI | Done (code). **Live benchmark run, deployment and demo GIF still to do** |
 
+### Optimizer video demo
+
+To show Rewrite, Retarget, or Hold without waiting for real traffic, use the
+[one-time performance simulation script](docs/OPTIMIZER_DEMO.md). It previews the real optimizer's decision,
+then optionally inserts 28 days of labelled history for one chosen published article in shared Supabase.
+Vercel reads it on refresh; existing metrics are never overwritten.
+
 ## Benchmark
 
 `benchmark/cases.json` has 10 of our own cases (5 from the product canvas) and 5 attack tests. Checks are

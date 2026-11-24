@@ -144,7 +144,7 @@ Scout -> Planner -> Writer -> (Fact Checker ‖ Link Builder) -> Editor -> Publi
 | Admin dashboard (analytics, users, content) | done |
 | Benchmark (10 own + 5 attack) | cases + runner done; **live run pending (needs keys)** |
 | Dockerfile, CI, cron workflow | done; Docker build verified only in CI |
-| Tests | 219 offline passing + 15 opt-in DB integration tests skipped; desktop/mobile browser checks passed with simulated responses |
+| Tests | 229 offline passing + 15 opt-in DB integration tests skipped; desktop/mobile browser checks passed with simulated responses |
 | Deployment, demo GIF | to do |
 
 ## Last verified (2026-11-24, after pulling increments 7-11)
@@ -229,3 +229,14 @@ README); the 5 new opt-in DB tests (`RUN_DB_TESTS=1`); the cron/optimizer agains
 - `vercel_build.py` bundles textstat’s NLTK cmudict data in `.nltk_data`; the root entry point stages the bundled data in a private /tmp directory and sets its lookup path, avoiding first-request downloads on Vercel’s read-only filesystem.
 
 - Deployment validation: 219 offline tests pass (15 DB tests skipped); root entry/asset checks pass; the bundled readability dictionary was exercised with runtime downloads disabled. Vercel account import and live smoke checks remain pending.
+
+## Optimizer recording scenarios
+- `scripts/simulate_performance.py` lists a user's published articles or previews 28 days of deterministic
+  Rewrite/Retarget/Hold metrics. `--apply` inserts only after validating ownership, conflicts, real combined
+  recommendations, and rewrite limits. One transaction, no overwrites, no model calls, no changes to today.
+- Same-day identical reruns are no-ops. Use a fresh article for a different scenario; no force or cleanup flag.
+- Ranking summaries expose `has_simulated` so mixed real/demo history remains labelled in dashboard and chat.
+- `docs/OPTIMIZER_DEMO.md` covers local commands, Vercel refresh, and the recording workflow. Shared DB
+  application remains pending a specific target username/article ID; development tests use only offline data.
+
+- Simulator validation: 229 offline tests pass (15 DB tests skipped), including real optimizer scenarios, mixed-source labels, dry runs, insert-only reruns, ownership, preservation of today/other articles, and transactional rollback.

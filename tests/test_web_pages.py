@@ -186,3 +186,17 @@ def test_generator_recovers_owned_final_draft_after_refresh(client):
     assert 'id="saved-draft"' not in client.get('/app/generator?topic=camping').text
     drafts.set_stage('alice', mine, 'published')
     assert 'id="saved-draft"' not in client.get('/app/generator').text
+
+
+def test_dashboard_labels_simulated_history_with_latest_real_ranking(client):
+    from datetime import date, timedelta
+    from stores import metrics
+    login(client)
+    post = posts.create_post('alice', 'mixed-demo', 'Mixed demo article', 'hiking', '', '<p>Guide</p>', {})
+    metrics.add_ranking('alice', post['id'], 'hiking', 22, 'simulated', date.today() - timedelta(days=1))
+    metrics.add_ranking('alice', post['id'], 'hiking', 20, 'tavily', date.today())
+    metrics.add_clicks('alice', post['id'], date.today() - timedelta(days=1), 50, 4)
+    page = client.get('/app')
+    assert page.status_code == 200
+    assert 'includes simulated rankings, visits, and affiliate clicks' in page.text
+    assert '<span class="tag">simulated</span>' in page.text
