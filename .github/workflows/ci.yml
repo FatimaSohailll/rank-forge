@@ -15,7 +15,7 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
-            backend/requirements.txt
+            requirements.txt
       - run: pip install -r requirements-dev.txt
       - name: Tests (offline, fake LLM, no keys or database)
         run: pytest -q
