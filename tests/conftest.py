@@ -1,7 +1,7 @@
 """Test setup: no network, no database, no real Anthropic calls.
 
 Env vars are set before any app module is imported, so pydantic-settings picks them up
-over api/.env. An empty DATABASE_URL makes the graph use the in-memory checkpointer.
+over backend/.env. An empty DATABASE_URL makes the graph use the in-memory checkpointer.
 """
 import os
 

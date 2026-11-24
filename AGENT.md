@@ -23,10 +23,10 @@ Must-haves: customer page + **admin dashboard** (not just a chat box); LangGraph
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example api/.env          # a repo-root .env also works (api/.env wins); fill ANTHROPIC_API_KEY, TAVILY_API_KEY,
+cp .env.example backend/.env          # a repo-root .env also works (backend/.env wins); fill ANTHROPIC_API_KEY, TAVILY_API_KEY,
                                   # DATABASE_URL, SESSION_SECRET, ADMIN_PASSWORD
 python scripts/init_db.py         # applies db/schema.sql + db/seed.sql, sets demo/admin passwords (only where none is set)
-cd api && uvicorn main:app --port 8000   # must run from api/ (flat imports); then open http://localhost:8000
+cd backend && uvicorn main:app --port 8000   # must run from backend/ (flat imports); then open http://localhost:8000
 ```
 **Port in use?** If `uvicorn` says `address already in use`, something else owns the port (check `ss -ltnp | grep :8000`).
 Pick another port and keep the public URL in step, because published-article links and the sitemap use `PUBLIC_SITE_URL`:
@@ -52,23 +52,23 @@ Empty `DATABASE_URL` falls back to in-memory checkpoints (state lost on restart)
 ## Layout
 | Path | Purpose |
 |---|---|
-| `api/main.py` | FastAPI app: `/chat`, `/chat/stream` (SSE), `/resume`, `/approvals`, `/health`, `/api`; auth + rate limit on chat; CORS; request timing; mounts web routers and `/static` |
-| `api/web/public.py`, `api/templates/post.html` | public pages: `/posts/{slug}` (CSP, JSON-LD, canonical), `/r/{code}` (click log + 302), `/sitemap.xml`, `/robots.txt` |
-| `api/web/auth_pages.py` | `/login`, `/signup`, `/logout` (form posts, Origin check, rate-limited) |
-| `api/web/app_pages.py` | customer pages `/app` (dashboard), `/app/generator`, `/app/articles`, `/app/articles/{draft_id}` (workspace), unpublish/restore |
-| `api/web/admin.py` | `/admin` (analytics from spans), `/admin/users` (disable/enable), `/admin/content` (unpublish/restore) |
-| `api/web/cron.py` | `POST /cron/run` (X-Cron-Secret): live rank checks + Optimizer decisions for all users |
-| `api/web/common.py`, `api/templates/*.html`, `api/static/app.{js,css}` | Jinja2 pages with a strict CSP (no inline JS/CSS); vanilla JS calls the same JSON API |
-| `api/graph.py` | LangGraph build (every node wrapped by `middleware.observability.instrument`), checkpointer, `run_turn()/stream_turn()` with optional UI `action`; thread key `user_id:thread_id` |
-| `api/state.py` | `RankForgeState` and `Route` literal (`chat, refuse, keyword_research, write_article, publish, performance, optimize, remember`) |
-| `api/guard.py` | regex prefilter for injection / off-topic |
-| `api/llm.py` | **only** Anthropic call site; cost guard check before each call, cost + token tracking, SDK retries |
-| `api/config.py` | pydantic-settings; reads `.env` / `api/.env` |
-| `api/run_context.py` | ContextVar per-run user, token/cost counters, tool_calls, `halted` |
-| `api/middleware/` | `observability.py` (spans), `auth.py` (sessions, PBKDF2, who the API acts as), `rate_limit.py`, `cost_guard.py`, `state_validator.py` |
-| `api/agents/` | `publish.py` (`publish_gate` interrupt; `publisher` creates or, for rewrites, replaces a post), `memory.py`, `remember.py`, `supervisor.py` (routes; UI `forced_route` skips the model), `keyword_scout.py`, `content_planner.py` (rewrite-aware), `writer.py`, `fact_checker.py`, `link_builder.py`, `editor.py`, `responder.py` (cost-halt message), `rank_tracker.py` (summaries + cron live check), `click_tracker.py`, `optimizer.py` (deterministic rewrite/retarget/hold, loop cap, action_log) |
-| `api/stores/` | `db.py`; `users.py`, `keywords.py`, `briefs.py`, `drafts.py`, `memory.py`, `approvals.py`, `posts.py`, `metrics.py` (rankings, clicks, action_log), `spans.py`, `affiliate.py`. Postgres when `DATABASE_URL` works, else in-process (dev/tests only) |
-| `api/tools/` | `web.py` (Tavily search/fetch + `wrap_untrusted`, cache, caps, one retry), `keywords.py` (Google Autocomplete), `seo_audit.py`, `serp.py` (SERP position via Tavily) |
+| `backend/main.py` | FastAPI app: `/chat`, `/chat/stream` (SSE), `/resume`, `/approvals`, `/health`, `/api`; auth + rate limit on chat; CORS; request timing; mounts web routers and `/static` |
+| `backend/web/public.py`, `backend/templates/post.html` | public pages: `/posts/{slug}` (CSP, JSON-LD, canonical), `/r/{code}` (click log + 302), `/sitemap.xml`, `/robots.txt` |
+| `backend/web/auth_pages.py` | `/login`, `/signup`, `/logout` (form posts, Origin check, rate-limited) |
+| `backend/web/app_pages.py` | customer pages `/app` (dashboard), `/app/generator`, `/app/articles`, `/app/articles/{draft_id}` (workspace), unpublish/restore |
+| `backend/web/admin.py` | `/admin` (analytics from spans), `/admin/users` (disable/enable), `/admin/content` (unpublish/restore) |
+| `backend/web/cron.py` | `POST /cron/run` (X-Cron-Secret): live rank checks + Optimizer decisions for all users |
+| `backend/web/common.py`, `backend/templates/*.html`, `backend/static/app.{js,css}` | Jinja2 pages with a strict CSP (no inline JS/CSS); vanilla JS calls the same JSON API |
+| `backend/graph.py` | LangGraph build (every node wrapped by `middleware.observability.instrument`), checkpointer, `run_turn()/stream_turn()` with optional UI `action`; thread key `user_id:thread_id` |
+| `backend/state.py` | `RankForgeState` and `Route` literal (`chat, refuse, keyword_research, write_article, publish, performance, optimize, remember`) |
+| `backend/guard.py` | regex prefilter for injection / off-topic |
+| `backend/llm.py` | **only** Anthropic call site; cost guard check before each call, cost + token tracking, SDK retries |
+| `backend/config.py` | pydantic-settings; reads `.env` / `backend/.env` |
+| `backend/run_context.py` | ContextVar per-run user, token/cost counters, tool_calls, `halted` |
+| `backend/middleware/` | `observability.py` (spans), `auth.py` (sessions, PBKDF2, who the API acts as), `rate_limit.py`, `cost_guard.py`, `state_validator.py` |
+| `backend/agents/` | `publish.py` (`publish_gate` interrupt; `publisher` creates or, for rewrites, replaces a post), `memory.py`, `remember.py`, `supervisor.py` (routes; UI `forced_route` skips the model), `keyword_scout.py`, `content_planner.py` (rewrite-aware), `writer.py`, `fact_checker.py`, `link_builder.py`, `editor.py`, `responder.py` (cost-halt message), `rank_tracker.py` (summaries + cron live check), `click_tracker.py`, `optimizer.py` (deterministic rewrite/retarget/hold, loop cap, action_log) |
+| `backend/stores/` | `db.py`; `users.py`, `keywords.py`, `briefs.py`, `drafts.py`, `memory.py`, `approvals.py`, `posts.py`, `metrics.py` (rankings, clicks, action_log), `spans.py`, `affiliate.py`. Postgres when `DATABASE_URL` works, else in-process (dev/tests only) |
+| `backend/tools/` | `web.py` (Tavily search/fetch + `wrap_untrusted`, cache, caps, one retry), `keywords.py` (Google Autocomplete), `seo_audit.py`, `serp.py` (SERP position via Tavily) |
 | `db/schema.sql`, `db/seed.sql` | 12 tables + RLS (+ `users.password_hash/disabled`); demo users, 23 affiliate programs, simulated 30-day metrics |
 | `scripts/init_db.py` | apply schema + seed, set demo/admin passwords |
 | `scripts/demo.py` | terminal demo (one-shot or interactive) |

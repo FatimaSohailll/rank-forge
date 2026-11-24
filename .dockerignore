@@ -8,7 +8,7 @@ venv
 .env
 .env.*
 !.env.example
-api/.env
+backend/.env
 tests
 docs
 benchmark/results.json

@@ -8,16 +8,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=7860
 
 WORKDIR /app
-COPY api/requirements.txt api/requirements.txt
-RUN pip install -r api/requirements.txt
+COPY backend/requirements.txt backend/requirements.txt
+RUN pip install -r backend/requirements.txt
 
-COPY api ./api
+COPY backend ./backend
 COPY db ./db
 COPY scripts ./scripts
 
 RUN useradd -m -u 1000 app && chown -R app /app
 USER app
-WORKDIR /app/api
+WORKDIR /app/backend
 EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"7860\")}/health')"

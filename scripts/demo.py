@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "api"))
+sys.path.insert(0, str(ROOT / "backend"))
 
 
 def run(graph, user: str, thread: str, message: str) -> None:

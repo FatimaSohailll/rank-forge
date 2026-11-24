@@ -20,7 +20,7 @@ USER, OTHER = "zz_test_user", "zz_other_user"
 
 def real_database_url() -> str:
     # tests/conftest.py blanks DATABASE_URL in the environment, so read the real one from the .env files
-    env = {**dotenv_values(ROOT / ".env"), **dotenv_values(ROOT / "api" / ".env")}
+    env = {**dotenv_values(ROOT / ".env"), **dotenv_values(ROOT / "backend" / ".env")}
     return env.get("DATABASE_URL", "")
 
 

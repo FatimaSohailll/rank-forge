@@ -15,7 +15,7 @@ if (_bundled_data / "corpora" / "cmudict").is_dir():
     shutil.copytree(_bundled_data / "corpora", Path(_nltk_cache.name) / "corpora")
     os.environ["NLTK_DATA"] = _nltk_cache.name
 
-API_DIR = str(Path(__file__).resolve().parent / "api")
+API_DIR = str(Path(__file__).resolve().parent / "backend")
 if API_DIR not in sys.path:
     sys.path.insert(0, API_DIR)
 

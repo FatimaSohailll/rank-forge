@@ -56,7 +56,7 @@ def test_root_entrypoint_serves_templates_and_assets(monkeypatch, fake_llm):
     monkeypatch.syspath_prepend(str(ROOT))
     module = importlib.import_module('app')
     assert module.app is sys.modules['main'].app
-    # Vercel's working directory is the project root, not api/.
+    # Vercel's working directory is the project root, not backend/.
     monkeypatch.chdir(ROOT)
     with TestClient(module.app) as client:
         assert client.get('/health').text == 'ok'
