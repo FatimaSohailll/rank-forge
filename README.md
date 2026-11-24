@@ -7,7 +7,23 @@ rankings and affiliate clicks and loops back to **rewrite** or **retarget** unde
 Built for the FAST AI-4016 *Design to Production* hackathon (Track 4, group 06). One FastAPI service serves the
 agent API, the customer website, the admin dashboard and the public article pages; Supabase Postgres is the database.
 
-**Live demo:** _add your deployment URL here_ · **Demo GIF:** _add `docs/demo.gif` here_
+| | URL |
+|---|---|
+| **Live website** (customer app + admin dashboard) | https://rank-forge-xi.vercel.app |
+| **Agent API base URL** | https://rank-forge-xi.vercel.app (`POST /chat`, `GET /health`) |
+
+**Demo GIF:** _add `docs/demo.gif` here_
+
+Try the API:
+
+```bash
+curl https://rank-forge-xi.vercel.app/health
+curl -X POST https://rank-forge-xi.vercel.app/chat -H "content-type: application/json" \
+  -d '{"user_id": "any_new_id", "thread_id": "t1", "message": "Give me keyword ideas for hiking daypacks"}'
+```
+
+Use any new `user_id`. The demo accounts (`demo_alice`, `demo_bob`) and `admin` have passwords, so the API only
+acts for them through a logged-in website session.
 
 ## What it does
 
@@ -145,7 +161,8 @@ Design intent is in [`CONTEXT.md`](CONTEXT.md); the contributor guide and module
 | 10 | Admin dashboard: users, content, analytics | Done |
 | 11 | Benchmark (10 own + 5 attack tests), Dockerfile, CI | Done: live run 15/15, $0.0136 |
 | 12 | `tests.json`, grader-safe rate limits, memory design note | Done |
-| 13 | Deployment (Hugging Face Space API + Vercel website) and demo GIF | To do |
+| 13 | Deployment: website + agent API on Vercel (https://rank-forge-xi.vercel.app) | Done |
+| 14 | Demo GIF | To do |
 
 ## Benchmark
 
@@ -260,7 +277,12 @@ function limit are configured in the repository. Keep install/build defaults; no
 
 Follow [the Vercel deployment guide](docs/VERCEL.md) for environment variables, domain setup, and live checks.
 It reuses Supabase without reseeding. Vercel requires a stable `SESSION_SECRET`, `DATABASE_URL`, secure
-cookies, and HTTPS public URLs. The live deployment is pending account setup and verification.
+cookies, and HTTPS public URLs.
+
+**Live at https://rank-forge-xi.vercel.app** (production branch `main`). Checked on 2026-11-24: `/health` returns
+`ok`; `/chat` refuses prompt injection and off-topic requests with 0 tokens; a malformed body still gets the
+`{reply, tool_calls, tokens}` shape with HTTP 200; `/app` redirects to login; sitemap and robots use the
+production domain.
 
 ## Deploy (Docker, e.g. a Hugging Face Space)
 
@@ -321,5 +343,5 @@ CONTEXT.md      target design;  AGENT.md  contributor guide + status
 | Customer website + admin dashboard | Done |
 | 10 own + 5 attack tests with pass rate | Done: 15/15 (100%), see [Benchmark](#benchmark); cases in [`tests.json`](tests.json) |
 | README: architecture diagram, setup steps, benchmark table, memory design note, `.env.example` | Done |
-| Live deployment (website + agent API) | **To do** |
+| Live deployment (website + agent API) | Done: https://rank-forge-xi.vercel.app |
 | README demo GIF | **To do** |
