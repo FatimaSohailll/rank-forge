@@ -27,16 +27,32 @@ class Settings(BaseSettings):
 
     database_url: str = ""
 
-    allowed_origins: str = "http://localhost:3000"
-    public_site_url: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:8000"
+    public_site_url: str = "http://localhost:8000"
 
-    cron_secret: str = "change-me"
+    cron_secret: str = "change-me"           # cron endpoints refuse to run while it is the default
+
+    # Auth: signed session cookies. Empty secret = random per process (sessions end on restart).
+    session_secret: str = ""
+    session_days: int = 7
+    cookie_secure: bool = False              # set true behind HTTPS (HF Space, Render, ...)
+    admin_password: str = ""                 # if set, the 'admin' account is created/updated at startup
+
+    # Rate limits (per minute, in-process sliding window)
+    chat_per_minute_user: int = 10
+    chat_per_minute_ip: int = 30
+    login_per_minute_ip: int = 10
+
+    # Human-in-the-loop / optimizer
+    max_loops: int = 3                       # rewrites per post before a human must decide
+    rank_checks_per_cron: int = 5            # Tavily credits the rank tracker may spend per cron run
 
     # Haiku 5.5 pricing, USD per million tokens
     price_in_per_mtok: float = 0.10
     price_out_per_mtok: float = 0.50
     max_spend_per_run_usd: float = 0.02
     daily_spend_ceiling_usd: float = 1.50
+    cost_warn_at_pct: int = 80
 
     # Conversation window sent to the model (short-term memory trimming)
     history_window: int = 12

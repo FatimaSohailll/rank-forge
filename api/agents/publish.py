@@ -19,7 +19,7 @@ from markdown_it import MarkdownIt
 
 from config import settings
 from state import RankForgeState
-from stores import affiliate, drafts, posts
+from stores import affiliate, briefs, drafts, posts
 
 log = logging.getLogger("rankforge.publish")
 
@@ -117,24 +117,45 @@ def public_url(slug: str) -> str:
 
 # ---------- nodes ----------
 
+def brief_for(user_id: str, draft: dict) -> dict:
+    """The brief this draft was written from (not whatever brief the current thread last saw)."""
+    row = briefs.get_brief(user_id, draft.get("brief_id"))
+    return dict((row or {}).get("brief") or {})
+
+
+def _draft_to_offer(state: RankForgeState) -> dict | None:
+    """The draft a Publish button chose (if it is this user's and finished), else the newest finished one."""
+    user_id = state["user_id"]
+    wanted = int(state.get("publish_draft_id") or 0)
+    if wanted:
+        draft = drafts.get_draft(user_id, wanted)
+        return draft if draft and draft["stage"] == "final" else None
+    return drafts.latest_draft(user_id, "final")
+
+
 def publish_gate(state: RankForgeState) -> dict:
     """Pause for a human decision. Returns {"approval": {...}} (and a reply when nothing is published)."""
     user_id = state["user_id"]
-    draft = drafts.latest_draft(user_id, "final")
+    draft = _draft_to_offer(state)
     if not draft:
         return {"approval": {"decision": "none"},
                 "reply": "There's no finished article to publish yet. Ask me to write one first."}
 
-    title, body = split_title(draft["body"], (state.get("brief") or {}).get("title") or "Untitled")
+    brief = brief_for(user_id, draft)
+    title, body = split_title(draft["body"], brief.get("title") or "Untitled")
     programs = affiliate.list_programs()
     n_links = sum(1 for m in _MD_LINK.finditer(body) if _program_for(m.group(2), programs))
     report = draft.get("seo_report") or {}
+    replaces = posts.get_for_user(user_id, int(brief["rewrite_of"])) if brief.get("rewrite_of") else None
     payload = {
         "action": "publish", "draft_id": draft["id"], "title": title,
-        "keyword": (state.get("brief") or {}).get("keyword") or state.get("keyword") or "",
+        "keyword": brief.get("keyword") or "",
         "words": (report.get("stats") or {}).get("words") or len(body.split()),
         "seo_score": report.get("score"), "flagged_claims": len(draft.get("flagged_claims") or []),
-        "affiliate_links": n_links, "slug_preview": slugify(title),
+        "affiliate_links": n_links,
+        "slug_preview": replaces["slug"] if replaces else slugify(title),
+        "replaces_post_id": replaces["id"] if replaces else None,
+        "replaces_title": replaces["title"] if replaces else None,
     }
     decision = interrupt(payload)                 # <- the graph stops here until a human resumes it
     decision = decision if isinstance(decision, dict) else {}
@@ -158,25 +179,50 @@ def publisher(state: RankForgeState) -> dict:
         return {"reply": "That draft is no longer available to publish."}
     amend = approval.get("amend") or {}
 
-    brief = state.get("brief") or {}
+    brief = brief_for(user_id, draft)                       # the brief this exact draft came from
     title, body = split_title(draft["body"], brief.get("title") or "Untitled")
     title = str(amend.get("title") or title).strip()[:120] or "Untitled"
     programs = affiliate.list_programs()
     body, tracked = track_links(body, programs)
     html = render_html(body)
-    slug = unique_slug(slugify(str(amend.get("slug") or title)))
     description = (str(amend.get("meta_description") or "").strip()[:155]
                    or meta_description(body, brief.get("meta_description", "")))
     now = datetime.now(timezone.utc).isoformat()
-    url = public_url(slug)
+    keyword = brief.get("keyword") or ""
 
-    post = posts.create_post(user_id, slug, title, brief.get("keyword") or state.get("keyword") or "", description,
-                             html, article_jsonld(title, description, url, now))
+    replaces = posts.get_for_user(user_id, int(brief["rewrite_of"])) if brief.get("rewrite_of") else None
+    if replaces:                                            # Optimizer re-write loop: same URL, new body
+        url = public_url(replaces["slug"])
+        post = posts.update_post(user_id, replaces["id"], title, description, html,
+                                 article_jsonld(title, description, url, now))
+        verb = "Updated"
+    else:
+        post, url = _create_with_unique_slug(user_id, str(amend.get("slug") or title), title, keyword,
+                                             description, html, now)
+        verb = "Published"
     for link in tracked:
         posts.create_link(link["code"], user_id, post["id"], link["program_id"], link["target_url"], link["anchor"])
     drafts.set_stage(user_id, draft["id"], "published")
-    log.info(json.dumps({"event": "published", "user": user_id, "post_id": post["id"], "links": len(tracked)}))
+    log.info(json.dumps({"event": verb.lower(), "user": user_id, "post_id": post["id"], "links": len(tracked)}))
 
     return {"post_id": str(post["id"]), "post_url": url, "published_at": now, "stage": "published",
-            "reply": f"Published: **{title}**\n{url}\n{len(tracked)} affiliate link(s) are tracked. "
+            "reply": f"{verb}: **{title}**\n{url}\n{len(tracked)} affiliate link(s) are tracked. "
                      f"Clicks and views will show up in your analytics."}
+
+
+def _create_with_unique_slug(user_id: str, slug_source: str, title: str, keyword: str, description: str,
+                             html: str, now: str) -> tuple[dict, str]:
+    """Insert the post; if another publish grabbed the same slug in between, try the next free one."""
+    base = slugify(slug_source)
+    for _ in range(5):
+        slug = unique_slug(base)
+        url = public_url(slug)
+        try:
+            return posts.create_post(user_id, slug, title, keyword, description, html,
+                                     article_jsonld(title, description, url, now)), url
+        except posts.SlugTaken:
+            continue
+    slug = f"{base[:70]}-{secrets.token_hex(3)}"
+    url = public_url(slug)
+    return posts.create_post(user_id, slug, title, keyword, description, html,
+                             article_jsonld(title, description, url, now)), url

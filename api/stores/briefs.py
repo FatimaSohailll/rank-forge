@@ -37,6 +37,18 @@ def latest_brief(user_id: str, keyword: str | None = None) -> dict | None:
             if mine else None)
 
 
+def get_brief(user_id: str, brief_id: int | None) -> dict | None:
+    """One brief by id, only if it belongs to user_id. Returns {id, keyword, brief}."""
+    if not brief_id:
+        return None
+    if db.enabled():
+        with db.pool.connection() as conn:
+            return conn.execute("select id, keyword, brief from briefs where user_id=%s and id=%s",
+                                (user_id, brief_id)).fetchone()
+    b = next((b for b in _mem if b["user_id"] == user_id and b["id"] == brief_id), None)
+    return {"id": b["id"], "keyword": b["keyword"], "brief": b["brief"]} if b else None
+
+
 def clear_memory() -> None:
     """Test helper for the in-process fallback."""
     _mem.clear()

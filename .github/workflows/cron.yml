@@ -1,0 +1,22 @@
+# Daily Monitor run: Rank Tracker + Optimizer on the deployed app.
+# Needs repository secrets RANKFORGE_URL (e.g. https://<space>.hf.space) and CRON_SECRET (same as the app's).
+name: Daily monitor
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /cron/run
+        env:
+          RANKFORGE_URL: ${{ secrets.RANKFORGE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$RANKFORGE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "RANKFORGE_URL / CRON_SECRET secrets not set; skipping."; exit 0
+          fi
+          curl -fsS -X POST "$RANKFORGE_URL/cron/run" -H "X-Cron-Secret: $CRON_SECRET"

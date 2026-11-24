@@ -2,7 +2,7 @@
 
 The model only *chooses* anchors (phrases already in the article) and a search query per link.
 The injection itself is deterministic: links are placed by code, never rewritten by the model,
-so the article text cannot be altered here. Click tracking (/go/{slug}) arrives in a later increment.
+so the article text cannot be altered here. The Publisher later rewrites these links to tracked /r/{code} links.
 """
 import copy
 import re

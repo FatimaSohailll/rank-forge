@@ -46,7 +46,10 @@ insert into affiliate_programs (name, network, category, commission_pct, base_ur
   ('Etsy',                        'Awin',              'crafts',      4.0, 'https://www.etsy.com/search?q={q}'),
   ('Sephora',                     'Rakuten',           'beauty',      5.0, 'https://www.sephora.com/search?keyword={q}'),
   ('Udemy',                       'Rakuten',           'education',  15.0, 'https://www.udemy.com/courses/search/?q={q}'),
-  ('Garmin',                      'CJ',                'electronics', 4.0, 'https://www.garmin.com/en-US/search/?query={q}')
+  ('Garmin',                      'CJ',                'electronics', 4.0, 'https://www.garmin.com/en-US/search/?query={q}'),
+  ('Amazon — Sports & Fitness',   'Amazon Associates', 'fitness',     3.0, 'https://www.amazon.com/s?k={q}'),
+  ('Myprotein',                   'Awin',              'fitness',     8.0, 'https://www.myprotein.com/search/?search={q}'),
+  ('Lenovo',                      'Impact',            'electronics', 3.0, 'https://www.lenovo.com/us/en/search?text={q}')
 on conflict (name) do nothing;
 
 -- ---------- Demo posts ----------

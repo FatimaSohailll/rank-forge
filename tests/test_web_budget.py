@@ -60,11 +60,24 @@ def test_failed_requests_are_not_cached(monkeypatch):
 
     def post(*a, **k):
         state["n"] += 1
-        return Resp({}, status=500) if state["n"] == 1 else Resp({"results": []})
+        return Resp({}, status=500) if state["n"] <= 2 else Resp({"results": []})
     monkeypatch.setattr(httpx, "post", post)
-    with pytest.raises(ToolUnavailable):
+    monkeypatch.setattr(web, "RETRY_DELAY_S", 0)
+    with pytest.raises(ToolUnavailable):                 # 500, retried once, 500 again
         web.web_search("boots")
-    assert web.web_search("boots") == [] and state["n"] == 2
+    assert web.web_search("boots") == [] and state["n"] == 3
+
+
+def test_one_transient_error_is_retried(monkeypatch):
+    monkeypatch.setattr(settings, "tavily_api_key", "k")
+    monkeypatch.setattr(web, "RETRY_DELAY_S", 0)
+    calls = []
+
+    def post(*a, **k):
+        calls.append(1)
+        return Resp({}, status=429) if len(calls) == 1 else Resp({"results": [{"title": "t", "url": "u", "content": "c"}]})
+    monkeypatch.setattr(httpx, "post", post)
+    assert len(web.web_search("boots")) == 1 and len(calls) == 2
 
 
 def test_per_run_cap_stops_further_searches_but_not_cache_hits(net, run, monkeypatch):

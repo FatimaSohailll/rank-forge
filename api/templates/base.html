@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}RankForge{% endblock %} · RankForge</title>
+  <meta name="description" content="RankForge: AI agents that research, write, fact-check, publish and optimise SEO affiliate articles.">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body data-user="{{ me.user_id if me else '' }}" data-page="{% block page %}{% endblock %}">
+  <header class="topbar">
+    <a class="brand" href="{{ '/app' if me else '/' }}"><span class="logo" aria-hidden="true">▲</span> RankForge</a>
+    <nav>
+      {% if me %}
+        <a href="/app" {% if path == '/app' %}aria-current="page"{% endif %}>Dashboard</a>
+        <a href="/app/generator" {% if path == '/app/generator' %}aria-current="page"{% endif %}>Generator</a>
+        <a href="/app/articles" {% if path.startswith('/app/articles') %}aria-current="page"{% endif %}>My articles</a>
+        {% if me.is_admin %}<a href="/admin" {% if path.startswith('/admin') %}aria-current="page"{% endif %}>Admin</a>{% endif %}
+        <form method="post" action="/logout" class="inline"><button class="link" type="submit">Log out ({{ me.user_id }})</button></form>
+      {% else %}
+        <a href="/login">Log in</a>
+        <a class="btn small" href="/signup">Start free</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="{% block main_class %}container{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    RankForge · AI-4016 Design to Production, group 06 · keyword scores and demo metrics are estimates or simulated, never claimed as real search volumes.
+  </footer>
+</body>
+</html>

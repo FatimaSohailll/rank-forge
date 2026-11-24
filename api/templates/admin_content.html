@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Admin · Content{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Admin</h1></div>
+{% include "admin_nav.html" %}
+<section class="card">
+  <h2>All articles ({{ posts | length }})</h2>
+  {% if posts %}<div class="table-wrap"><table>
+    <thead><tr><th>Article</th><th>Owner</th><th>Keyword</th><th>Rewrites</th><th>Published</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for p in posts %}<tr>
+      <td>{% if p.status == 'published' %}<a href="/posts/{{ p.slug }}" target="_blank" rel="noopener">{{ p.title }}</a>{% else %}{{ p.title }}{% endif %}</td>
+      <td>{{ p.user_id }}</td><td>{{ p.keyword }}</td><td>{{ p.rewrite_count or 0 }}</td>
+      <td><small>{{ p.published_at.strftime('%Y-%m-%d') if p.published_at else '' }}</small></td>
+      <td><span class="tag {{ p.status }}">{{ p.status }}</span></td>
+      <td><form method="post" action="/admin/posts/{{ p.id }}/status" class="inline">
+        {% if p.status == 'published' %}<input type="hidden" name="status" value="archived"><button class="btn small ghost" type="submit">Unpublish</button>
+        {% else %}<input type="hidden" name="status" value="published"><button class="btn small ghost" type="submit">Restore</button>{% endif %}</form></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>{% else %}<p class="empty">No articles yet.</p>{% endif %}
+</section>
+{% endblock %}

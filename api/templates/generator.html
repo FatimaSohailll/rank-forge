@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Article generator{% endblock %}
+{% block page %}generator{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Article generator</h1>
+  <button class="btn ghost small" type="button" id="new-thread">New conversation</button>
+</div>
+
+<div class="chat card"
+     {% if optimize_post %}data-autorun-action="optimize" data-autorun-target="{{ optimize_post.id }}" data-autorun-message="Optimise my article “{{ optimize_post.title }}”"{% endif %}>
+  <div id="log" class="log-area" aria-live="polite">
+    <div class="msg assistant intro">
+      <p>Hi! I research keywords, write and fact-check articles, add affiliate links and publish them once you approve. Try:</p>
+      <ul class="suggestions">
+        <li><button type="button" class="chip" data-suggest="keyword ideas for hiking daypacks">keyword ideas for hiking daypacks</button></li>
+        <li><button type="button" class="chip" data-suggest="write an article on best budget hiking daypacks">write an article on best budget hiking daypacks</button></li>
+        <li><button type="button" class="chip" data-suggest="how are my articles doing?">how are my articles doing?</button></li>
+        <li><button type="button" class="chip" data-suggest="my site is about hiking gear for beginners, friendly tone. Remember that.">remember my niche and tone</button></li>
+      </ul>
+    </div>
+  </div>
+  <ol id="progress" class="progress" hidden></ol>
+  <form id="chat-form" class="composer">
+    <label class="sr-only" for="message">Message</label>
+    <textarea id="message" name="message" rows="2" maxlength="2000" placeholder="Ask for keyword ideas, an article, or how your posts are doing…" required>{{ ('write an article on ' ~ topic) if topic else '' }}</textarea>
+    <button class="btn" type="submit" id="send">Send</button>
+  </form>
+  <p class="muted small">A full article takes about a minute. Publishing always asks for your approval first.</p>
+</div>
+{% endblock %}

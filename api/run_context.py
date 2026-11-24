@@ -17,6 +17,7 @@ class RunContext:
     cost_usd: float = 0.0
     searches: int = 0           # Tavily credits spent this run
     tool_calls: list[dict] = field(default_factory=list)
+    halted: str = ""            # set by the cost guard when a spend ceiling stops the run
 
     def add_usage(self, tokens_in: int, tokens_out: int, cost: float) -> None:
         self.tokens_in += tokens_in
